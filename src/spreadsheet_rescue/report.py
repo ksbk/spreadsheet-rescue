@@ -139,6 +139,14 @@ def _excel_value(val: Any) -> Any:
             return None
     except Exception:
         return val
+
+    if isinstance(val, pd.Timestamp):
+        dt = val.to_pydatetime()
+        return dt.replace(tzinfo=None) if dt.tzinfo else dt
+
+    if isinstance(val, datetime) and val.tzinfo:
+        return val.replace(tzinfo=None)
+
     return val
 
 

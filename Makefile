@@ -1,4 +1,4 @@
-.PHONY: help install dev lint format typecheck test demo clean distclean
+.PHONY: help install dev lint format typecheck test coverage demo clean distclean
 
 VENV      := .venv
 PYTHON    := $(VENV)/bin/python
@@ -36,6 +36,11 @@ typecheck: ## Run mypy type checks
 
 test: ## Run pytest
 	$(VENV)/bin/pytest tests/ -v
+
+coverage: ## Run pytest with coverage report
+	$(VENV)/bin/pytest tests/ --cov=spreadsheet_rescue --cov-report=term-missing --cov-report=html
+	@echo ""
+	@echo "HTML coverage report: htmlcov/index.html"
 
 # ── Run ──────────────────────────────────────────────────────────
 
