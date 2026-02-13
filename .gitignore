@@ -17,6 +17,9 @@ venv/
 .ruff_cache/
 htmlcov/
 
+# Dependency lockfile policy
+# uv.lock is intentionally tracked for reproducible dev/CI environments.
+
 # Output
 output/
 demo/output/

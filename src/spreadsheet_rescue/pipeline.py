@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+import re
+from typing import Any, Literal, cast
 
 import pandas as pd
 
@@ -12,30 +13,126 @@ from spreadsheet_rescue.models import QCReport
 # ── Header normalisation ────────────────────────────────────────
 
 
+_THOUSANDS_COMMA_RE = re.compile(r"^[+-]?\d{1,3}(,\d{3})+$")
+_THOUSANDS_DOT_RE = re.compile(r"^[+-]?\d{1,3}(\.\d{3})+$")
+_AMBIGUOUS_DAY_MONTH_RE = re.compile(r"^\s*(\d{1,2})[/-](\d{1,2})[/-]\d{2,4}\s*$")
+NumberLocale = Literal["auto", "us", "eu"]
+
+
+def _normalize_header_name(name: object) -> str:
+    return re.sub(r"\s+", "_", str(name).strip().lower())
+
+
+def _find_duplicate_columns(columns: pd.Index) -> list[str]:
+    return sorted({str(name) for name in columns[columns.duplicated(keep=False)]})
+
+
 def _normalize_headers(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    df.columns = pd.Index([c.strip().lower() for c in df.columns])
+    df.columns = pd.Index([_normalize_header_name(c) for c in df.columns])
     return df
 
 
 # ── Type coercion helpers ────────────────────────────────────────
 
 
-def _coerce_date(s: pd.Series) -> pd.Series:
-    return pd.to_datetime(s, errors="coerce", dayfirst=False, format="mixed")
+def _coerce_date(s: pd.Series, *, dayfirst: bool) -> pd.Series:
+    return pd.to_datetime(s, errors="coerce", dayfirst=dayfirst, format="mixed")
 
 
-def _coerce_numeric(s: pd.Series) -> pd.Series:
+def _count_ambiguous_day_month_dates(s: pd.Series) -> int:
+    parts = s.astype("string").str.extract(_AMBIGUOUS_DAY_MONTH_RE)
+    if parts.empty:
+        return 0
+
+    first = pd.to_numeric(parts[0], errors="coerce")
+    second = pd.to_numeric(parts[1], errors="coerce")
+    mask = first.between(1, 12) & second.between(1, 12)
+    return int(mask.fillna(False).sum())
+
+
+def _normalize_numeric_token(token: str, *, locale: NumberLocale) -> str:
+    token = token.strip()
+    token = re.sub(r"^\((.*)\)$", r"-\1", token)
+    token = token.replace("—", "")
+    token = token.replace("–", "")
+    token = token.replace("%", "")
+    token = re.sub(r"[\$€£]", "", token)
+    token = re.sub(r"(?<=\d)[\s\u00a0]+(?=\d)", "", token)
+    token = token.replace("'", "")
+    token = token.replace("_", "")
+
+    if token in {"", "-", "+"}:
+        return ""
+    if token.startswith("+"):
+        token = token[1:]
+
+    has_comma = "," in token
+    has_dot = "." in token
+
+    if locale == "us":
+        if has_comma and has_dot:
+            return token.replace(",", "")
+        if has_comma and _THOUSANDS_COMMA_RE.fullmatch(token):
+            return token.replace(",", "")
+        return token
+
+    if locale == "eu":
+        if has_comma and has_dot:
+            token = token.replace(".", "")
+            token = token.replace(",", ".")
+            return token
+        if has_comma:
+            if token.count(",") == 1:
+                whole, frac = token.split(",", 1)
+                if len(frac) in (1, 2, 3):
+                    return f"{whole}.{frac}"
+            return token
+        if has_dot and _THOUSANDS_DOT_RE.fullmatch(token):
+            return token.replace(".", "")
+        return token
+
+    if has_comma and has_dot:
+        if token.rfind(",") > token.rfind("."):
+            token = token.replace(".", "")
+            token = token.replace(",", ".")
+        else:
+            token = token.replace(",", "")
+        return token
+
+    if has_comma:
+        if _THOUSANDS_COMMA_RE.fullmatch(token):
+            return token.replace(",", "")
+        if token.count(",") == 1:
+            whole, frac = token.split(",", 1)
+            if len(frac) in (1, 2):
+                return f"{whole}.{frac}"
+            if len(frac) == 3:
+                return f"{whole}{frac}"
+        parts = token.split(",")
+        if len(parts) > 1 and len(parts[-1]) in (1, 2) and all(len(p) == 3 for p in parts[1:-1]):
+            return f"{''.join(parts[:-1])}.{parts[-1]}"
+        return token
+
+    if has_dot and _THOUSANDS_DOT_RE.fullmatch(token):
+        return token.replace(".", "")
+
+    return token
+
+
+def _coerce_numeric_value(value: object, *, locale: NumberLocale) -> str | None:
+    try:
+        if pd.isna(cast(Any, value)):
+            return None
+    except Exception:
+        pass
+    return _normalize_numeric_token(str(value), locale=locale)
+
+
+def _coerce_numeric(s: pd.Series, *, locale: NumberLocale) -> pd.Series:
     if not pd.api.types.is_numeric_dtype(s):
-        cleaned = (
-            s.astype("string")
-            .str.replace(r"^\((.*)\)$", r"-\1", regex=True)
-            .str.replace(r"[\$€£,]", "", regex=True)
-            .str.replace(r"(?<=\d)\s+(?=\d)", "", regex=True)
-            .str.replace("%", "", regex=False)
-            .str.replace("—", "", regex=False)
-            .str.replace("–", "", regex=False)
-            .str.strip()
+        cleaned = s.astype("string").map(
+            lambda val: _coerce_numeric_value(val, locale=locale)
         )
         return pd.to_numeric(cleaned, errors="coerce")
     return pd.to_numeric(s, errors="coerce")
@@ -44,16 +141,32 @@ def _coerce_numeric(s: pd.Series) -> pd.Series:
 # ── Main cleaning function ──────────────────────────────────────
 
 
-def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, QCReport]:
-    """Clean *df* according to the v0.1 data contract.
+def clean_dataframe(
+    df: pd.DataFrame,
+    *,
+    dayfirst: bool = False,
+    number_locale: NumberLocale = "auto",
+) -> tuple[pd.DataFrame, QCReport]:
+    """Clean *df* according to the v0.1.1 data contract.
 
     Returns ``(cleaned_df, qc_report)``.  If required columns are missing
     the returned DataFrame is empty but the QC report is populated.
     """
+    if number_locale not in {"auto", "us", "eu"}:
+        raise ValueError(f"Invalid number locale: {number_locale!r}. Use auto/us/eu.")
+
     qc = QCReport(rows_in=len(df), rows_out=len(df), dropped_rows=0)
 
     # 1. Normalise headers
     df = _normalize_headers(df)
+    duplicate_cols = _find_duplicate_columns(df.columns)
+    if duplicate_cols:
+        qc.rows_out = 0
+        qc.dropped_rows = qc.rows_in
+        qc.warnings.append(
+            f"Duplicate columns after normalization: {', '.join(duplicate_cols)}"
+        )
+        return pd.DataFrame(), qc
 
     # 2. Check required columns
     present = set(df.columns)
@@ -66,7 +179,15 @@ def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, QCReport]:
         return pd.DataFrame(), qc
 
     # 3. Type coercion
-    df["date"] = _coerce_date(df["date"])
+    ambiguous_dates = _count_ambiguous_day_month_dates(df["date"])
+    if ambiguous_dates:
+        parsed_mode = "day/month (DD/MM)" if dayfirst else "month/day (MM/DD)"
+        qc.warnings.append(
+            "Found "
+            f"{ambiguous_dates} ambiguous day/month dates; interpreted as {parsed_mode}"
+        )
+
+    df["date"] = _coerce_date(df["date"], dayfirst=dayfirst)
     bad_dates = int(df["date"].isna().sum())
     if bad_dates:
         qc.warnings.append(f"Found {bad_dates} rows with unparseable dates")
@@ -77,7 +198,7 @@ def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, QCReport]:
             qc.warnings.append(
                 f"Found {pct_count} values with '%' in {col}; treated as plain numbers"
             )
-        df[col] = _coerce_numeric(df[col])
+        df[col] = _coerce_numeric(df[col], locale=number_locale)
 
     # 4. Trim text fields
     for col in ("product", "region"):

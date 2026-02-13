@@ -7,15 +7,16 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-from openpyxl import load_workbook
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 
-from spreadsheet_rescue.models import QCReport
 from spreadsheet_rescue import report as report_mod
+from spreadsheet_rescue.models import QCReport
 from spreadsheet_rescue.report import DATE_FMT, PCT_FMT, write_report
 
 
-def _make_nonempty_inputs() -> tuple[pd.DataFrame, dict, pd.DataFrame, pd.DataFrame, pd.DataFrame, QCReport]:
+def _make_nonempty_inputs() -> tuple[
+    pd.DataFrame, dict, pd.DataFrame, pd.DataFrame, pd.DataFrame, QCReport
+]:
     clean_df = pd.DataFrame(
         {
             "date": [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-08")],
@@ -60,7 +61,9 @@ def test_write_report_preserves_dates_and_applies_date_format(tmp_path: Path) ->
     clean_ws = wb["Clean_Data"]
     weekly_ws = wb["Weekly"]
 
-    clean_headers = [clean_ws.cell(row=1, column=c).value for c in range(1, clean_ws.max_column + 1)]
+    clean_headers = [
+        clean_ws.cell(row=1, column=c).value for c in range(1, clean_ws.max_column + 1)
+    ]
     date_col = clean_headers.index("date") + 1
     week_col = clean_headers.index("week") + 1
 
@@ -72,7 +75,9 @@ def test_write_report_preserves_dates_and_applies_date_format(tmp_path: Path) ->
     assert date_cell.number_format == DATE_FMT
     assert week_cell.number_format == DATE_FMT
 
-    weekly_headers = [weekly_ws.cell(row=1, column=c).value for c in range(1, weekly_ws.max_column + 1)]
+    weekly_headers = [
+        weekly_ws.cell(row=1, column=c).value for c in range(1, weekly_ws.max_column + 1)
+    ]
     weekly_week_col = weekly_headers.index("week") + 1
     weekly_week_cell = weekly_ws.cell(row=2, column=weekly_week_col)
     assert isinstance(weekly_week_cell.value, datetime)
@@ -118,7 +123,15 @@ def test_dashboard_kpis_render_in_fixed_order(tmp_path: Path) -> None:
     kpi_labels = [
         label
         for label in labels
-        if label in {"Total Revenue", "Total Profit", "Profit Margin %", "Total Units", "Top Product", "Top Region"}
+        if label
+        in {
+            "Total Revenue",
+            "Total Profit",
+            "Profit Margin %",
+            "Total Units",
+            "Top Product",
+            "Top Region",
+        }
     ]
     assert kpi_labels == [
         "Total Revenue",
@@ -260,6 +273,11 @@ def test_excel_value_returns_original_on_isna_exception(monkeypatch: pytest.Monk
 
     monkeypatch.setattr(report_mod.pd, "isna", _boom)
     assert report_mod._excel_value(val) is val
+
+
+def test_excel_value_escapes_formula_like_strings() -> None:
+    escaped = report_mod._excel_value("=SUM(A1:A2)")
+    assert escaped == "'=SUM(A1:A2)"
 
 
 def test_df_to_sheet_non_table_sets_auto_filter() -> None:

@@ -29,7 +29,7 @@ src/spreadsheet_rescue/
   __main__.py      # python -m support
 ```
 
-## Required Columns (v0.1)
+## Required Columns (v0.1.1)
 
 `date`, `product`, `region`, `revenue`, `cost`, `units`
 
@@ -51,15 +51,15 @@ Every successful run produces:
 | Code | Meaning |
 |------|---------|
 | 0    | Success |
-| 2    | Schema failure (missing required columns) |
+| 2    | Validation/input failure (missing/duplicate columns, unreadable input) |
 
 ## Pipeline Steps
 
 1. Load table as `dtype=str` (safe coercion)
-2. Normalize headers (lowercase, strip, replace spaces with `_`)
+2. Normalize headers (lowercase, strip, collapse spaces to `_`)
 3. Apply column map if `--map` provided
 4. Check required columns → hard fail if missing
-5. Coerce types: dates (`format="mixed"`), numerics (`pd.to_numeric`)
+5. Coerce types: dates (`--dayfirst/--monthfirst`), numerics (`--number-locale`)
 6. Drop rows with invalid/missing required fields
 7. Add derived fields: `profit = revenue - cost`, `week`
 8. Sort by date
@@ -68,13 +68,14 @@ Every successful run produces:
 11. Write Excel report with professional formatting
 12. Write QC report + run manifest
 
-## Excel Report Formatting (v0.1)
+## Excel Report Formatting (v0.1.1)
 
-- Number formats: `#,##0.00` (currency), `#,##0` (integers), `0.0%` (percentages)
+- Number formats: `#,##0.00` (currency), `#,##0` (integers), `0.00"%"` (percent labels)
 - Freeze panes on all sheets (row 2)
 - Auto-fit column widths
 - Clean_Data as Excel Table (TableStyleMedium9)
 - Dashboard: QC Notes block (yellow fill) + KPI cards (blue fill)
+- Formula-like text values are escaped before writing to Excel cells
 
 ## Roadmap
 
@@ -93,7 +94,7 @@ Every successful run produces:
 
 ## Tech Stack
 
-- Python 3.11+
+- Python 3.10+
 - pandas ≥ 2.0 (tested on 3.0)
 - openpyxl ≥ 3.1
 - typer ≥ 0.9 + rich ≥ 13.0

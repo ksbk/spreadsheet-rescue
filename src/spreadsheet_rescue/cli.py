@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
+from enum import Enum
 from pathlib import Path
 
 import pandas as pd
@@ -34,6 +36,12 @@ app = typer.Typer(
 console = Console()
 
 
+class NumberLocaleOption(str, Enum):
+    auto = "auto"
+    us = "us"
+    eu = "eu"
+
+
 def _noop(*_args: object, **_kwargs: object) -> None:
     return None
 
@@ -55,6 +63,14 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+def _normalize_column_name(name: object) -> str:
+    return re.sub(r"\s+", "_", str(name).strip().lower())
+
+
+def _find_duplicate_columns(columns: pd.Index) -> list[str]:
+    return sorted({str(col) for col in columns[columns.duplicated(keep=False)]})
+
+
 def _parse_column_map(raw: list[str] | None, *, quiet: bool = False) -> dict[str, str]:
     """Parse ``--map target=source`` pairs into ``{source: target}``."""
     if not raw:
@@ -64,8 +80,8 @@ def _parse_column_map(raw: list[str] | None, *, quiet: bool = False) -> dict[str
         if "=" not in item:
             raise ValueError(f"Invalid --map value: {item!r}  (expected target=source)")
         target, source = item.split("=", 1)
-        target_norm = target.strip().lower()
-        source_norm = source.strip().lower()
+        target_norm = _normalize_column_name(target)
+        source_norm = _normalize_column_name(source)
         if not target_norm or not source_norm:
             raise ValueError("--map entries must have non-empty target and source (target=source)")
         if source_norm in mapping and not quiet:
@@ -101,7 +117,7 @@ def _apply_column_map(df: pd.DataFrame, mapping: dict[str, str]) -> pd.DataFrame
     if not mapping:
         return df
     df = df.copy()
-    df.columns = pd.Index([c.strip().lower() for c in df.columns])
+    df.columns = pd.Index([_normalize_column_name(c) for c in df.columns])
     rename = {src: tgt for src, tgt in mapping.items() if src in df.columns}
     if rename:
         df = df.rename(columns=rename)
@@ -109,6 +125,12 @@ def _apply_column_map(df: pd.DataFrame, mapping: dict[str, str]) -> pd.DataFrame
 
 
 def _write_manifest(out_dir: Path, input_file: Path, created_at: str, qc: QCReport) -> Path:
+    sha256 = ""
+    try:
+        sha256 = sha256_file(input_file)
+    except OSError:
+        pass
+
     manifest = RunManifest(
         version=__version__,
         input_path=str(input_file.resolve()),
@@ -116,9 +138,23 @@ def _write_manifest(out_dir: Path, input_file: Path, created_at: str, qc: QCRepo
         created_at_utc=created_at,
         rows_in=qc.rows_in,
         rows_out=qc.rows_out,
-        sha256=sha256_file(input_file),
+        sha256=sha256,
     )
     return write_json(out_dir / "run_manifest.json", manifest.to_dict())
+
+
+def _write_failure_artifacts(
+    out_dir: Path,
+    input_file: Path,
+    created_at: str,
+    *,
+    message: str,
+    rows_in: int = 0,
+) -> tuple[Path, Path]:
+    qc = QCReport(rows_in=rows_in, rows_out=0, dropped_rows=rows_in, warnings=[message])
+    qc_path = write_qc_report(out_dir, qc)
+    manifest_path = _write_manifest(out_dir, input_file, created_at, qc)
+    return qc_path, manifest_path
 
 
 # ── Callbacks ────────────────────────────────────────────────────
@@ -161,6 +197,16 @@ def run(
         None, "--profile",
         help="Profile file containing column mappings (target=source lines).",
     ),
+    dayfirst: bool = typer.Option(
+        False,
+        "--dayfirst/--monthfirst",
+        help="Date parsing mode for ambiguous values like 01/02/2024.",
+    ),
+    number_locale: NumberLocaleOption = typer.Option(
+        NumberLocaleOption.auto,
+        "--number-locale",
+        help="Numeric parsing mode: auto, us, or eu.",
+    ),
     quiet: bool = typer.Option(
         False, "--quiet", "-q",
         help="Suppress informational output; still writes all artifacts.",
@@ -187,13 +233,23 @@ def run(
             console.print(f"  Using profile: {profile}")
         if mapping:
             console.print(f"  Column map: {mapping}")
+        console.print(
+            "  Parse mode: "
+            f"date={'DD/MM' if dayfirst else 'MM/DD'}, "
+            f"number_locale={number_locale.value}"
+        )
 
     # ── Load ─────────────────────────────────────────────────────
     echo("[blue]>[/blue] Loading input file …")
     try:
         raw_df = load_table(input_file)
-    except (FileNotFoundError, ValueError) as exc:
+    except (FileNotFoundError, ValueError, OSError) as exc:
+        qc_path, manifest_path = _write_failure_artifacts(
+            out_dir, input_file, created_at, message=str(exc)
+        )
         _err(str(exc))
+        console.print(f"  QC report -> {qc_path}")
+        console.print(f"  Manifest  -> {manifest_path}")
         raise typer.Exit(code=2)
 
     echo(f"  {len(raw_df)} rows x {len(raw_df.columns)} columns")
@@ -211,9 +267,26 @@ def run(
     if mapping:
         raw_df = _apply_column_map(raw_df, mapping)
 
+    duplicate_columns = _find_duplicate_columns(raw_df.columns)
+    if duplicate_columns:
+        message = (
+            "Duplicate columns after normalization/mapping: "
+            f"{', '.join(duplicate_columns)}"
+        )
+        qc_path, manifest_path = _write_failure_artifacts(
+            out_dir, input_file, created_at, message=message, rows_in=len(raw_df)
+        )
+        _err(message)
+        console.print("  Hint: avoid mapping multiple source columns into one target")
+        console.print(f"  QC report -> {qc_path}")
+        console.print(f"  Manifest  -> {manifest_path}")
+        raise typer.Exit(code=2)
+
     # ── Clean ────────────────────────────────────────────────────
     echo("[blue]>[/blue] Cleaning …")
-    clean_df, qc = clean_dataframe(raw_df)
+    clean_df, qc = clean_dataframe(
+        raw_df, dayfirst=dayfirst, number_locale=number_locale.value
+    )
 
     # Always write QC
     qc_path = write_qc_report(out_dir, qc)
@@ -278,6 +351,16 @@ def validate(
         None, "--profile",
         help="Profile file containing column mappings (target=source lines).",
     ),
+    dayfirst: bool = typer.Option(
+        False,
+        "--dayfirst/--monthfirst",
+        help="Date parsing mode for ambiguous values like 01/02/2024.",
+    ),
+    number_locale: NumberLocaleOption = typer.Option(
+        NumberLocaleOption.auto,
+        "--number-locale",
+        help="Numeric parsing mode: auto, us, or eu.",
+    ),
     quiet: bool = typer.Option(
         False, "--quiet", "-q",
         help="Suppress informational output; still writes QC + manifest.",
@@ -306,12 +389,22 @@ def validate(
         ))
         if profile:
             console.print(f"  Using profile: {profile}")
+        console.print(
+            "  Parse mode: "
+            f"date={'DD/MM' if dayfirst else 'MM/DD'}, "
+            f"number_locale={number_locale.value}"
+        )
 
     # ── Load ─────────────────────────────────────────────────────
     try:
         raw_df = load_table(input_file)
-    except (FileNotFoundError, ValueError) as exc:
+    except (FileNotFoundError, ValueError, OSError) as exc:
+        qc_path, manifest_path = _write_failure_artifacts(
+            out_dir, input_file, created_at, message=str(exc)
+        )
         _err(str(exc))
+        console.print(f"  QC       -> {qc_path}")
+        console.print(f"  Manifest -> {manifest_path}")
         raise typer.Exit(code=2)
 
     echo(f"  {len(raw_df)} rows x {len(raw_df.columns)} columns")
@@ -328,8 +421,23 @@ def validate(
     if mapping:
         raw_df = _apply_column_map(raw_df, mapping)
 
+    duplicate_columns = _find_duplicate_columns(raw_df.columns)
+    if duplicate_columns:
+        message = (
+            "Duplicate columns after normalization/mapping: "
+            f"{', '.join(duplicate_columns)}"
+        )
+        qc_path, manifest_path = _write_failure_artifacts(
+            out_dir, input_file, created_at, message=message, rows_in=len(raw_df)
+        )
+        _err(message)
+        console.print("  Hint: avoid mapping multiple source columns into one target")
+        console.print(f"  QC       -> {qc_path}")
+        console.print(f"  Manifest -> {manifest_path}")
+        raise typer.Exit(code=2)
+
     # ── Clean (dry) ──────────────────────────────────────────────
-    _, qc = clean_dataframe(raw_df)
+    _, qc = clean_dataframe(raw_df, dayfirst=dayfirst, number_locale=number_locale.value)
 
     # Warn if all rows dropped
     if (qc.rows_out == 0 and qc.rows_in > 0) and (not quiet):

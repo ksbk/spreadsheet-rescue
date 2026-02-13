@@ -9,7 +9,9 @@ import pytest
 from spreadsheet_rescue.io import load_table, write_json
 
 
-def test_load_table_csv_uses_sniffing_and_string_dtype(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_load_table_csv_uses_sniffing_and_string_dtype(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     csv_path = tmp_path / "data.csv"
     csv_path.write_text("a;b\n1;2\n", encoding="utf-8")
     expected = pd.DataFrame({"a": ["1"], "b": ["2"]})
@@ -123,9 +125,17 @@ def test_load_table_xls_missing_xlrd_raises_friendly_error(
         load_table(xls_path)
 
 
+def test_load_table_rejects_directory_path(tmp_path: Path) -> None:
+    input_dir = tmp_path / "fake.csv"
+    input_dir.mkdir()
+
+    with pytest.raises(ValueError, match="not a file"):
+        load_table(input_dir)
+
+
 def test_load_table_csv_wraps_parser_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     csv_path = tmp_path / "broken.csv"
-    csv_path.write_text("not,a,valid\"\n", encoding="utf-8")
+    csv_path.write_text('not,a,valid"\n', encoding="utf-8")
 
     def _fake_read_csv(path: Path, **kwargs: object) -> pd.DataFrame:
         del path, kwargs

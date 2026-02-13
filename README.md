@@ -113,7 +113,7 @@ You'll find:
 
 **Tech stack:** Python • pandas • openpyxl • typer • rich
 
-Pipeline (v0.1):
+Pipeline (v0.1.1):
 
 ```
 Load table (CSV/XLSX/XLS)
@@ -145,22 +145,25 @@ This contract is intentionally stable so you can build workflows (or a future we
 
 ## QC & Reliability
 
-### v0.1 QC rules
+### v0.1.1 QC rules
 
 * Missing required columns → **hard fail** (exit code `2`) but still write `qc_report.json`
+* Duplicate columns after header normalization / `--map` → **hard fail** (exit code `2`)
 * Invalid dates/numbers → dropped rows + warnings (recorded in QC report)
+* Ambiguous dates like `01/02/2024` → warning with parse mode (`MM/DD` or `DD/MM`)
 * Empty cleaned dataset → warning (report still emitted if possible)
+* Formula-like text values in Excel output are escaped for safety
 
 ### Exit codes
 
 * `0` success
-* `2` schema failure (missing required columns / unusable input)
+* `2` validation/input failure (missing/duplicate columns, unreadable input)
 
 ---
 
 ## Configuration
 
-### v0.1 defaults
+### v0.1.1 defaults
 
 Required columns (case-insensitive):
 
@@ -183,6 +186,32 @@ srescue run -i data.csv --out-dir output \
 
 Format: `--map target=source` (repeatable).
 
+If mapping would create duplicate target columns, validation fails with exit `2`
+and writes QC + manifest explaining the duplicate names.
+
+### Date parse mode (`--dayfirst / --monthfirst`)
+
+Control how ambiguous dates are interpreted:
+
+```bash
+srescue validate -i data.csv --out-dir output --dayfirst
+```
+
+Default is `--monthfirst` (`MM/DD`).
+
+### Numeric parse mode (`--number-locale`)
+
+Control numeric parsing behavior:
+
+```bash
+srescue run -i data.csv --out-dir output --number-locale eu
+```
+
+Supported values:
+* `auto` (default) — heuristic parsing
+* `us` — comma thousands, dot decimals (e.g., `1,200.50`)
+* `eu` — dot thousands, comma decimals (e.g., `1.200,50`)
+
 ### Validate-only mode
 
 Preflight check — writes QC + manifest without producing the Excel report:
@@ -191,7 +220,16 @@ Preflight check — writes QC + manifest without producing the Excel report:
 srescue validate -i data.csv --out-dir output
 ```
 
-Exit `0` = OK, exit `2` = schema failure.
+Exit `0` = OK, exit `2` = validation/input failure.
+
+### Reproducible dev environment (uv)
+
+This repo tracks `uv.lock` for reproducible lint/type/test environments:
+
+```bash
+uv sync --extra dev
+uv run pytest -q
+```
 
 ### v0.2 (planned)
 
@@ -202,7 +240,7 @@ Exit `0` = OK, exit `2` = schema failure.
 
 ## Roadmap
 
-### v0.1 — MVP (current)
+### v0.1.1 — MVP (current)
 
 * [x] CLI `srescue run`
 * [x] CLI `srescue validate` (preflight)
@@ -254,6 +292,16 @@ If you want this done for your specific spreadsheets, I offer:
 ---
 
 ## Changelog
+
+### 2026-02-13 — v0.1.1
+
+* Added parse controls: `--dayfirst/--monthfirst` and `--number-locale auto|us|eu`
+* Fixed numeric corruption risk for locale-formatted values like `1.200,50`
+* Added duplicate-column protection after normalization/mapping (exit `2` + QC/manifest)
+* Hardened load failures to return exit `2` and write QC/manifest consistently
+* Escaped formula-like text when writing Excel report values
+* Added CI-ready quality checks for `src/` + `tests/`
+* Updated dependency metadata (`typer>=0.9`) and bumped version to `0.1.1`
 
 ### 2026-02-13 — v0.1.0
 

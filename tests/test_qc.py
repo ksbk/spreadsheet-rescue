@@ -8,7 +8,9 @@ from spreadsheet_rescue.qc import write_qc_report
 
 
 def test_write_qc_report_writes_expected_contract(tmp_path: Path) -> None:
-    qc = QCReport(rows_in=3, rows_out=2, dropped_rows=1, missing_columns=["cost"], warnings=["warn"])
+    qc = QCReport(
+        rows_in=3, rows_out=2, dropped_rows=1, missing_columns=["cost"], warnings=["warn"]
+    )
 
     out = write_qc_report(tmp_path, qc)
 

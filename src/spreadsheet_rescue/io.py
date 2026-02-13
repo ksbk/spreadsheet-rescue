@@ -25,6 +25,8 @@ def load_table(path: Path, delimiter: str | None = None) -> pd.DataFrame:
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"Input file not found: {path}")
+    if not path.is_file():
+        raise ValueError(f"Input path is not a file: {path}")
 
     suffix = path.suffix.lower()
     if suffix == ".csv":
@@ -45,11 +47,21 @@ def load_table(path: Path, delimiter: str | None = None) -> pd.DataFrame:
                 )
             except (UnicodeDecodeError, pd.errors.ParserError) as exc:
                 last_exc = exc
+            except OSError as exc:
+                raise ValueError(f"Could not read CSV {path}: {exc}") from exc
         raise ValueError(f"Could not read CSV {path} (decode or parse failed)") from last_exc
 
     if suffix in (".xlsx", ".xlsm", ".xltx", ".xltm"):
-        read_excel = cast(Callable[..., pd.DataFrame], getattr(pd, "read_excel"))
-        return read_excel(path, engine="openpyxl", dtype="string")
+        try:
+            read_excel = cast(Callable[..., pd.DataFrame], getattr(pd, "read_excel"))
+            return read_excel(path, engine="openpyxl", dtype="string")
+        except ImportError as exc:
+            raise ValueError(
+                "Unsupported .xlsx input unless 'openpyxl' is installed. "
+                "Add dependency: pip install openpyxl"
+            ) from exc
+        except OSError as exc:
+            raise ValueError(f"Could not read Excel file {path}: {exc}") from exc
 
     if suffix == ".xls":
         try:
@@ -60,6 +72,8 @@ def load_table(path: Path, delimiter: str | None = None) -> pd.DataFrame:
                 "Unsupported .xls input unless 'xlrd' is installed. "
                 "Either convert to .xlsx or add dependency: pip install xlrd"
             ) from exc
+        except OSError as exc:
+            raise ValueError(f"Could not read Excel file {path}: {exc}") from exc
 
     raise ValueError(f"Unsupported file type: {suffix!r}. Use .csv, .xlsx, or .xls")
 

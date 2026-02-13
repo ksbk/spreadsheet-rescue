@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 
 import spreadsheet_rescue.cli as cli_mod
 from spreadsheet_rescue.cli import app
+from spreadsheet_rescue.models import QCReport
 
 runner = CliRunner()
 
@@ -263,7 +264,9 @@ def test_profile_is_directory_error(tmp_path: Path) -> None:
 def test_profile_with_comments_and_blanks(tmp_path: Path) -> None:
     """Test profile file handling of comments and blank lines."""
     profile_path = tmp_path / "profile_comments.txt"
-    profile_path.write_text("# Comment line\n\nrevenue=Sales\n  \n# Another comment\ndate=OrderDate\n")
+    profile_path.write_text(
+        "# Comment line\n\nrevenue=Sales\n  \n# Another comment\ndate=OrderDate\n"
+    )
 
     csv_path = _write_csv(
         tmp_path,
@@ -295,7 +298,51 @@ def test_version_flag_prints_and_exits(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert "spreadsheet-rescue" in result.stdout
-    assert "v0.1.0" in result.stdout
+    assert "v0.1.1" in result.stdout
+
+
+def test_validate_passes_date_and_number_parse_flags(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    csv_path = _write_csv(
+        tmp_path,
+        "ok.csv",
+        "date,product,region,revenue,cost,units\n01/02/2024,Widget,US,1.200,40,1\n",
+    )
+    out_dir = tmp_path / "flags_out"
+    captured: dict[str, object] = {}
+
+    def _fake_clean(
+        df: pd.DataFrame,
+        *,
+        dayfirst: bool = False,
+        number_locale: str = "auto",
+    ) -> tuple[pd.DataFrame, QCReport]:
+        captured["dayfirst"] = dayfirst
+        captured["number_locale"] = number_locale
+        qc = QCReport(rows_in=len(df), rows_out=len(df), dropped_rows=0)
+        return df, qc
+
+    monkeypatch.setattr(cli_mod, "clean_dataframe", _fake_clean)
+
+    result = runner.invoke(
+        app,
+        [
+            "validate",
+            "--input",
+            str(csv_path),
+            "--out-dir",
+            str(out_dir),
+            "--dayfirst",
+            "--number-locale",
+            "eu",
+            "--quiet",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["dayfirst"] is True
+    assert captured["number_locale"] == "eu"
 
 
 def test_map_invalid_format_fails(tmp_path: Path) -> None:
@@ -309,7 +356,16 @@ def test_map_invalid_format_fails(tmp_path: Path) -> None:
 
     result = runner.invoke(
         app,
-        ["validate", "--input", str(csv_path), "--out-dir", str(out_dir), "--map", "invalid", "--quiet"],
+        [
+            "validate",
+            "--input",
+            str(csv_path),
+            "--out-dir",
+            str(out_dir),
+            "--map",
+            "invalid",
+            "--quiet",
+        ],
     )
 
     assert result.exit_code == 2
@@ -327,7 +383,16 @@ def test_map_empty_target_fails(tmp_path: Path) -> None:
 
     result = runner.invoke(
         app,
-        ["validate", "--input", str(csv_path), "--out-dir", str(out_dir), "--map", "=source", "--quiet"],
+        [
+            "validate",
+            "--input",
+            str(csv_path),
+            "--out-dir",
+            str(out_dir),
+            "--map",
+            "=source",
+            "--quiet",
+        ],
     )
 
     assert result.exit_code == 2
@@ -422,6 +487,51 @@ def test_cli_map_overrides_profile(tmp_path: Path) -> None:
     assert qc["missing_columns"] == []
 
 
+def test_validate_duplicate_columns_after_mapping_fails_with_artifacts(tmp_path: Path) -> None:
+    csv_path = _write_csv(
+        tmp_path,
+        "dup.csv",
+        "date,product,region,revenue,Sales,cost,units\n2024-01-01,Widget,US,100,200,40,1\n",
+    )
+    out_dir = tmp_path / "dup_out"
+
+    result = runner.invoke(
+        app,
+        [
+            "validate",
+            "--input",
+            str(csv_path),
+            "--out-dir",
+            str(out_dir),
+            "--map",
+            "revenue=Sales",
+            "--quiet",
+        ],
+    )
+
+    assert result.exit_code == 2
+    qc = json.loads((out_dir / "qc_report.json").read_text())
+    assert qc["rows_out"] == 0
+    assert any("Duplicate columns after normalization/mapping" in w for w in qc["warnings"])
+    assert (out_dir / "run_manifest.json").exists()
+
+
+def test_validate_directory_input_path_fails_without_traceback(tmp_path: Path) -> None:
+    bad_input = tmp_path / "fake.csv"
+    bad_input.mkdir()
+    out_dir = tmp_path / "dir_input_out"
+
+    result = runner.invoke(
+        app,
+        ["validate", "--input", str(bad_input), "--out-dir", str(out_dir), "--quiet"],
+    )
+
+    assert result.exit_code == 2
+    assert "not a file" in result.stdout
+    assert (out_dir / "qc_report.json").exists()
+    assert (out_dir / "run_manifest.json").exists()
+
+
 def test_run_empty_file_nonquiet(tmp_path: Path) -> None:
     """Test run command with empty file in non-quiet mode."""
     csv_path = _write_csv(tmp_path, "empty.csv", "date,product,region,revenue,cost,units\n")
@@ -508,8 +618,7 @@ def test_run_with_mapping_nonquiet_shows_map(tmp_path: Path) -> None:
     csv_path = _write_csv(
         tmp_path,
         "renamed.csv",
-        "OrderDate,Item,Region,Sales,Expense,Quantity\n"
-        "2024-01-01,Widget,US,100,40,10\n",
+        "OrderDate,Item,Region,Sales,Expense,Quantity\n2024-01-01,Widget,US,100,40,10\n",
     )
     out_dir = tmp_path / "mapped_run_out"
 
@@ -662,6 +771,8 @@ def test_run_load_table_value_error_exits(monkeypatch: pytest.MonkeyPatch, tmp_p
 
     assert result.exit_code == 2
     assert "bad file format" in result.stdout
+    assert (out_dir / "qc_report.json").exists()
+    assert (out_dir / "run_manifest.json").exists()
 
 
 def test_validate_nonquiet_with_profile_shows_profile_line(tmp_path: Path) -> None:
@@ -714,3 +825,5 @@ def test_validate_load_table_value_error_exits(
 
     assert result.exit_code == 2
     assert "bad file format" in result.stdout
+    assert (out_dir / "qc_report.json").exists()
+    assert (out_dir / "run_manifest.json").exists()

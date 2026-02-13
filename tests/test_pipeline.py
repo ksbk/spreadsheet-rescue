@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from spreadsheet_rescue.pipeline import (
     clean_dataframe,
@@ -202,3 +203,120 @@ def test_percent_values_emit_qc_warning_and_are_coerced() -> None:
     assert any("values with '%' in revenue" in warning for warning in qc.warnings)
     assert any("values with '%' in cost" in warning for warning in qc.warnings)
     assert any("values with '%' in units" in warning for warning in qc.warnings)
+
+
+def test_european_numeric_formats_are_parsed_without_corruption() -> None:
+    df = pd.DataFrame(
+        {
+            "date": ["2024-01-01"],
+            "product": ["Widget"],
+            "region": ["EU"],
+            "revenue": ["1.200,50"],
+            "cost": ["200,25"],
+            "units": ["2"],
+        }
+    )
+
+    clean_df, qc = clean_dataframe(df)
+
+    assert len(clean_df) == 1
+    assert float(clean_df.iloc[0]["revenue"]) == 1200.5
+    assert float(clean_df.iloc[0]["cost"]) == 200.25
+    assert float(clean_df.iloc[0]["profit"]) == 1000.25
+    assert qc.rows_out == 1
+
+
+def test_ambiguous_day_month_dates_emit_warning() -> None:
+    df = pd.DataFrame(
+        {
+            "date": ["01/02/2024", "02/01/2024"],
+            "product": ["Widget", "Gadget"],
+            "region": ["US", "US"],
+            "revenue": ["10", "20"],
+            "cost": ["5", "10"],
+            "units": ["1", "2"],
+        }
+    )
+
+    clean_df, qc = clean_dataframe(df)
+
+    assert len(clean_df) == 2
+    assert any("ambiguous day/month dates" in warning for warning in qc.warnings)
+
+
+def test_duplicate_columns_after_normalization_return_schema_failure_qc() -> None:
+    df = pd.DataFrame(
+        {
+            "Revenue": ["100"],
+            " revenue ": ["200"],
+            "date": ["2024-01-01"],
+            "product": ["Widget"],
+            "region": ["US"],
+            "cost": ["50"],
+            "units": ["1"],
+        }
+    )
+
+    clean_df, qc = clean_dataframe(df)
+
+    assert clean_df.empty
+    assert qc.rows_out == 0
+    assert qc.dropped_rows == qc.rows_in
+    assert any("Duplicate columns after normalization" in warning for warning in qc.warnings)
+
+
+def test_dayfirst_mode_changes_ambiguous_date_parsing() -> None:
+    df = pd.DataFrame(
+        {
+            "date": ["01/02/2024"],
+            "product": ["Widget"],
+            "region": ["US"],
+            "revenue": ["10"],
+            "cost": ["2"],
+            "units": ["1"],
+        }
+    )
+
+    clean_monthfirst, _ = clean_dataframe(df, dayfirst=False)
+    clean_dayfirst, qc = clean_dataframe(df, dayfirst=True)
+
+    assert clean_monthfirst.iloc[0]["date"] == pd.Timestamp("2024-01-02")
+    assert clean_dayfirst.iloc[0]["date"] == pd.Timestamp("2024-02-01")
+    assert any("interpreted as day/month (DD/MM)" in warning for warning in qc.warnings)
+
+
+def test_explicit_number_locale_modes_parse_differently() -> None:
+    df = pd.DataFrame(
+        {
+            "date": ["2024-01-01", "2024-01-02"],
+            "product": ["US", "EU"],
+            "region": ["US", "EU"],
+            "revenue": ["1,200.50", "1.200,50"],
+            "cost": ["200.25", "200,25"],
+            "units": ["1", "1"],
+        }
+    )
+
+    clean_us, _ = clean_dataframe(df, number_locale="us")
+    clean_eu, _ = clean_dataframe(df, number_locale="eu")
+
+    us_row = clean_us[clean_us["product"] == "US"].iloc[0]
+    eu_row = clean_eu[clean_eu["product"] == "EU"].iloc[0]
+    assert float(us_row["revenue"]) == 1200.5
+    assert float(eu_row["revenue"]) == 1200.5
+
+
+def test_invalid_number_locale_raises_value_error() -> None:
+    df = pd.DataFrame(
+        {
+            "date": ["2024-01-01"],
+            "product": ["Widget"],
+            "region": ["US"],
+            "revenue": ["10"],
+            "cost": ["5"],
+            "units": ["1"],
+        }
+    )
+
+    with pytest.raises(ValueError, match="Invalid number locale"):
+        clean_dataframe(df, number_locale="invalid")  # type: ignore[arg-type]

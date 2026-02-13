@@ -25,11 +25,11 @@ dev: $(VENV)/bin/activate ## Install package + dev tools (ruff, mypy, pytest)
 # ── Quality ──────────────────────────────────────────────────────
 
 lint: ## Run ruff linter
-	$(VENV)/bin/ruff check src/
+	$(VENV)/bin/ruff check src/ tests/
 
 format: ## Auto-format with ruff
-	$(VENV)/bin/ruff format src/
-	$(VENV)/bin/ruff check --fix src/
+	$(VENV)/bin/ruff format src/ tests/
+	$(VENV)/bin/ruff check --fix src/ tests/
 
 typecheck: ## Run mypy type checks
 	$(VENV)/bin/mypy src/spreadsheet_rescue/

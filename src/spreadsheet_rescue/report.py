@@ -50,6 +50,7 @@ _COL_FORMATS: dict[str, str] = {
 }
 
 _AUTO_WIDTH_SAMPLE_ROWS = 300
+_EXCEL_FORMULA_PREFIXES = ("=", "+", "-", "@")
 
 
 # ── Helpers ──────────────────────────────────────────────────────
@@ -146,6 +147,13 @@ def _excel_value(val: Any) -> Any:
 
     if isinstance(val, datetime) and val.tzinfo:
         return val.replace(tzinfo=None)
+
+    if isinstance(val, str):
+        if val.startswith("'"):
+            return val
+        stripped = val.lstrip()
+        if stripped and stripped[0] in _EXCEL_FORMULA_PREFIXES:
+            return f"'{val}"
 
     return val
 
