@@ -13,8 +13,7 @@ srescue validate -i demo/before.csv --out-dir demo/output   # preflight check
 srescue run      -i demo/before.csv --out-dir demo/output   # full pipeline
 ```
 
-<!-- Add a screenshot of the Dashboard sheet here: -->
-<!-- ![Dashboard](demo/after_dashboard.png) -->
+![Dashboard](demo/after_dashboard.png)
 
 **What comes out:**
 
@@ -241,6 +240,8 @@ If you want this done for your specific spreadsheets, I offer:
 | **Rescue**        | Clean + merge + deliver `Final_Report.xlsx`               | 24–48h             |
 | **Automate**      | Rescue + reusable script profile (run it yourself weekly) | 2–4 days           |
 | **Ops Reporting** | Automate + monthly support + custom KPIs                  | ongoing            |
+
+**How it works:** Send me a sample export (you can redact sensitive data). I'll run `srescue validate` first and share the QC report before generating the final dashboard — so you see exactly what was cleaned and why before paying.
 
 **Deliverables always include:**
 

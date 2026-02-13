@@ -50,12 +50,15 @@ version: ## Print tool version
 
 # ── Cleanup ──────────────────────────────────────────────────────
 
-clean: ## Remove output directory
-	rm -rf output/
-	rm -rf .mypy_cache/ 2>/dev/null || true
-	rm -rf src/__pycache__/ 2>/dev/null || true
-
-distclean: clean ## Remove output + venv + build artifacts
-	rm -rf $(VENV) build/ dist/ *.egg-info src/*.egg-info
+clean: ## Remove build artifacts, caches, and output
+	rm -rf output/ demo/output/
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name .mypy_cache -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name .ruff_cache -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name '*.egg-info' -exec rm -rf {} + 2>/dev/null || true
+	find . -type f -name '*.pyc' -delete 2>/dev/null || true
+	rm -rf build/ dist/ .eggs/
+
+distclean: clean ## clean + remove venv
+	rm -rf $(VENV)

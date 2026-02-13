@@ -12,6 +12,8 @@ venv/
 
 # Output
 output/
+demo/output/
+*.xlsx
 
 # IDE
 .vscode/
