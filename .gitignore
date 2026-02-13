@@ -10,6 +10,11 @@ build/
 .venv/
 venv/
 
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+
 # Output
 output/
 demo/output/
