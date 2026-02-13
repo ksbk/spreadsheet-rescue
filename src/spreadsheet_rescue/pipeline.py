@@ -28,8 +28,11 @@ def _coerce_date(s: pd.Series) -> pd.Series:
 def _coerce_numeric(s: pd.Series) -> pd.Series:
     if not pd.api.types.is_numeric_dtype(s):
         cleaned = (
-            s.astype(str)
+            s.astype("string")
+            .str.replace(r"^\((.*)\)$", r"-\1", regex=True)
             .str.replace(r"[\$€£,]", "", regex=True)
+            .str.replace(r"(?<=\d)\s+(?=\d)", "", regex=True)
+            .str.replace("%", "", regex=False)
             .str.replace("—", "", regex=False)
             .str.replace("–", "", regex=False)
             .str.strip()
@@ -58,16 +61,27 @@ def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, QCReport]:
     if missing:
         qc.missing_columns = missing
         qc.warnings.append(f"Missing required columns: {', '.join(missing)}")
+        qc.rows_out = 0
+        qc.dropped_rows = qc.rows_in
         return pd.DataFrame(), qc
 
     # 3. Type coercion
     df["date"] = _coerce_date(df["date"])
+    bad_dates = int(df["date"].isna().sum())
+    if bad_dates:
+        qc.warnings.append(f"Found {bad_dates} rows with unparseable dates")
+
     for col in ("revenue", "cost", "units"):
+        pct_count = int(df[col].astype("string").str.contains("%", na=False).sum())
+        if pct_count:
+            qc.warnings.append(
+                f"Found {pct_count} values with '%' in {col}; treated as plain numbers"
+            )
         df[col] = _coerce_numeric(df[col])
 
     # 4. Trim text fields
     for col in ("product", "region"):
-        df[col] = df[col].astype(str).str.strip()
+        df[col] = df[col].astype("string").str.strip().replace("", pd.NA)
 
     # 5. Drop rows missing any required field
     before = len(df)
@@ -78,6 +92,7 @@ def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, QCReport]:
 
     # 6. Derived fields
     df["profit"] = df["revenue"] - df["cost"]
+    # pandas "W" = weeks ending Sunday; start_time is Monday.
     df["week"] = df["date"].dt.to_period("W").dt.start_time
 
     # 7. Sort by date
@@ -85,6 +100,9 @@ def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, QCReport]:
 
     qc.rows_out = len(df)
     qc.dropped_rows = qc.rows_in - qc.rows_out
+
+    if qc.rows_out > 0 and float(df["revenue"].sum()) == 0:
+        qc.warnings.append("Total revenue is 0 after cleaning")
 
     if len(df) == 0:
         qc.warnings.append("Cleaned dataset is empty — no valid rows remain")
@@ -109,6 +127,7 @@ def compute_weekly(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def compute_top_products(df: pd.DataFrame, n: int = 10) -> pd.DataFrame:
+    """Return top N products by revenue (and profit)."""
     if df.empty:
         return pd.DataFrame(columns=["product", "revenue", "profit"])
     return (
@@ -121,6 +140,7 @@ def compute_top_products(df: pd.DataFrame, n: int = 10) -> pd.DataFrame:
 
 
 def compute_top_regions(df: pd.DataFrame, n: int = 10) -> pd.DataFrame:
+    """Return top N regions by revenue (and profit)."""
     if df.empty:
         return pd.DataFrame(columns=["region", "revenue", "profit"])
     return (
@@ -146,7 +166,7 @@ def compute_dashboard_kpis(df: pd.DataFrame) -> dict[str, Any]:
 
     total_rev = float(df["revenue"].sum())
     total_profit = float(df["profit"].sum())
-    margin = round(total_profit / total_rev * 100, 1) if total_rev else 0
+    margin = round((total_profit / total_rev) * 100, 2) if total_rev else 0.0
 
     top_product = (
         df.groupby("product")["revenue"].sum().sort_values(ascending=False).index[0]

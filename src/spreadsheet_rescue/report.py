@@ -32,7 +32,7 @@ KPI_FILL = PatternFill(start_color="D6E4F0", end_color="D6E4F0", fill_type="soli
 
 CURRENCY_FMT = '#,##0.00'
 INT_FMT = '#,##0'
-PCT_FMT = '0.0%'
+PCT_FMT = '0.0"%"'
 
 # Column-name → format mapping for data sheets
 _COL_FORMATS: dict[str, str] = {
