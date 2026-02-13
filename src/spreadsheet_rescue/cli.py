@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
 
+import pandas as pd
 import typer
 from rich.console import Console
 from rich.panel import Panel
@@ -25,9 +25,6 @@ from spreadsheet_rescue.qc import write_qc_report
 from spreadsheet_rescue.report import write_report
 from spreadsheet_rescue.utils import sha256_file, utcnow_iso
 
-if TYPE_CHECKING:
-    import pandas as pd
-
 app = typer.Typer(
     name="srescue",
     help="spreadsheet-rescue — Clean messy spreadsheets into client-ready reports.",
@@ -37,8 +34,12 @@ app = typer.Typer(
 console = Console()
 
 
+def _noop(*_args: object, **_kwargs: object) -> None:
+    return None
+
+
 def _printer(quiet: bool) -> Callable[..., None]:
-    return console.print if not quiet else (lambda *args, **kwargs: None)
+    return _noop if quiet else console.print
 
 
 def _err(msg: str) -> None:
@@ -79,8 +80,15 @@ def _load_profile_map(profile: Path | None) -> list[str]:
         return []
     if not profile.exists():
         raise ValueError(f"Profile not found: {profile} (expected lines like revenue=Sales)")
+    if profile.is_dir():
+        raise ValueError(f"Profile is a directory, not a file: {profile}")
+    try:
+        text = profile.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"Cannot read profile {profile}: {exc}") from exc
+
     lines: list[str] = []
-    for line in profile.read_text(encoding="utf-8").splitlines():
+    for line in text.splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
@@ -88,13 +96,11 @@ def _load_profile_map(profile: Path | None) -> list[str]:
     return lines
 
 
-def _apply_column_map(df: "pd.DataFrame", mapping: dict[str, str]) -> "pd.DataFrame":
+def _apply_column_map(df: pd.DataFrame, mapping: dict[str, str]) -> pd.DataFrame:
     """Rename columns in *df* according to *mapping* (``{source: target}``)."""
     if not mapping:
         return df
     df = df.copy()
-    import pandas as pd
-
     df.columns = pd.Index([c.strip().lower() for c in df.columns])
     rename = {src: tgt for src, tgt in mapping.items() if src in df.columns}
     if rename:
@@ -120,7 +126,7 @@ def _write_manifest(out_dir: Path, input_file: Path, created_at: str, qc: QCRepo
 
 @app.callback()
 def main(
-    version: Optional[bool] = typer.Option(
+    version: bool | None = typer.Option(
         None, "--version", "-V",
         help="Show version and exit.",
         callback=_version_callback,
@@ -144,14 +150,14 @@ def run(
         Path("output"), "--out-dir", "-o",
         help="Output directory for report + QC + manifest.",
     ),
-    col_map: Optional[list[str]] = typer.Option(
+    col_map: list[str] | None = typer.Option(
         None, "--map", "-m",
         help=(
             "Column mapping: target=source (rename source->target). "
             "E.g. --map revenue=Sales --map date=OrderDate"
         ),
     ),
-    profile: Optional[Path] = typer.Option(
+    profile: Path | None = typer.Option(
         None, "--profile",
         help="Profile file containing column mappings (target=source lines).",
     ),
@@ -177,6 +183,8 @@ def run(
             f"Input:  {input_file}\nOutput: {out_dir}",
             title="Pipeline Start", border_style="blue",
         ))
+        if profile:
+            console.print(f"  Using profile: {profile}")
         if mapping:
             console.print(f"  Column map: {mapping}")
 
@@ -195,9 +203,8 @@ def run(
         qc_path = write_qc_report(out_dir, qc)
         manifest_path = _write_manifest(out_dir, input_file, created_at, qc)
         _err("Input file has 0 rows.")
-        if not quiet:
-            echo(f"  QC report -> {qc_path}")
-            echo(f"  Manifest  -> {manifest_path}")
+        console.print(f"  QC report -> {qc_path}")
+        console.print(f"  Manifest  -> {manifest_path}")
         raise typer.Exit(code=2)
 
     # ── Map columns (if requested) ───────────────────────────────
@@ -263,11 +270,11 @@ def validate(
         Path("output"), "--out-dir", "-o",
         help="Output directory for QC + manifest.",
     ),
-    col_map: Optional[list[str]] = typer.Option(
+    col_map: list[str] | None = typer.Option(
         None, "--map", "-m",
         help="Column mapping: target=source (rename source->target).",
     ),
-    profile: Optional[Path] = typer.Option(
+    profile: Path | None = typer.Option(
         None, "--profile",
         help="Profile file containing column mappings (target=source lines).",
     ),
@@ -297,6 +304,8 @@ def validate(
             f"Input: {input_file}",
             title="Validate", border_style="cyan",
         ))
+        if profile:
+            console.print(f"  Using profile: {profile}")
 
     # ── Load ─────────────────────────────────────────────────────
     try:
@@ -312,9 +321,8 @@ def validate(
         qc_path = write_qc_report(out_dir, qc)
         manifest_path = _write_manifest(out_dir, input_file, created_at, qc)
         _err("Input file has 0 rows.")
-        if not quiet:
-            echo(f"  QC       -> {qc_path}")
-            echo(f"  Manifest -> {manifest_path}")
+        console.print(f"  QC       -> {qc_path}")
+        console.print(f"  Manifest -> {manifest_path}")
         raise typer.Exit(code=2)
 
     if mapping:
@@ -322,6 +330,13 @@ def validate(
 
     # ── Clean (dry) ──────────────────────────────────────────────
     _, qc = clean_dataframe(raw_df)
+
+    # Warn if all rows dropped
+    if (qc.rows_out == 0 and qc.rows_in > 0) and (not quiet):
+        console.print(
+            "[yellow]![/yellow] Validation warning: "
+            "cleaned dataset is empty (all rows invalid)."
+        )
 
     qc_path = write_qc_report(out_dir, qc)
     manifest_path = _write_manifest(out_dir, input_file, created_at, qc)
@@ -351,12 +366,11 @@ def validate(
         console.print(f"  QC       -> {qc_path}")
         console.print(f"  Manifest -> {manifest_path}")
     else:
-        echo(f"  QC       -> {qc_path}")
-        echo(f"  Manifest -> {manifest_path}")
+        console.print(f"  QC       -> {qc_path}")
+        console.print(f"  Manifest -> {manifest_path}")
 
     if qc.missing_columns:
-        if quiet:
-            _err(f"Missing columns: {', '.join(qc.missing_columns)}")
-            console.print(f"  Expected: {', '.join(REQUIRED_COLUMNS)}")
-            console.print("  Hint: use --map target=source to rename headers")
+        _err(f"Missing columns: {', '.join(qc.missing_columns)}")
+        console.print(f"  Expected: {', '.join(REQUIRED_COLUMNS)}")
+        console.print("  Hint: use --map target=source to rename headers")
         raise typer.Exit(code=2)
