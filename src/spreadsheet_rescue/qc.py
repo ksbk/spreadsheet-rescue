@@ -10,4 +10,5 @@ from spreadsheet_rescue.models import QCReport
 
 def write_qc_report(out_dir: Path, qc: QCReport) -> Path:
     """Write ``qc_report.json`` into *out_dir* and return the path."""
+    out_dir = Path(out_dir)
     return write_json(out_dir / "qc_report.json", qc.to_dict())

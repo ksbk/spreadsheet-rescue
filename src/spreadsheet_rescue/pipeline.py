@@ -50,7 +50,7 @@ def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, QCReport]:
     Returns ``(cleaned_df, qc_report)``.  If required columns are missing
     the returned DataFrame is empty but the QC report is populated.
     """
-    qc = QCReport(rows_in=len(df))
+    qc = QCReport(rows_in=len(df), rows_out=len(df), dropped_rows=0)
 
     # 1. Normalise headers
     df = _normalize_headers(df)
