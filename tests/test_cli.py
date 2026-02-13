@@ -5,8 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pandas as pd
+import pytest
 from typer.testing import CliRunner
 
+import spreadsheet_rescue.cli as cli_mod
 from spreadsheet_rescue.cli import app
 
 runner = CliRunner()
@@ -225,6 +228,36 @@ def test_profile_file_not_found_error(tmp_path: Path) -> None:
 
     assert result.exit_code == 2
     assert "Profile not found" in result.stdout
+
+
+def test_profile_is_directory_error(tmp_path: Path) -> None:
+    """Test --profile with a directory fails gracefully."""
+    profile_dir = tmp_path / "profile_dir"
+    profile_dir.mkdir()
+
+    csv_path = _write_csv(
+        tmp_path,
+        "ok.csv",
+        "date,product,region,revenue,cost,units\n2024-01-01,Widget,US,10,5,1\n",
+    )
+    out_dir = tmp_path / "out"
+
+    result = runner.invoke(
+        app,
+        [
+            "validate",
+            "--input",
+            str(csv_path),
+            "--out-dir",
+            str(out_dir),
+            "--profile",
+            str(profile_dir),
+            "--quiet",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "directory" in result.stdout.lower()
 
 
 def test_profile_with_comments_and_blanks(tmp_path: Path) -> None:
@@ -534,3 +567,150 @@ def test_run_invalid_profile_format_error(tmp_path: Path) -> None:
     # Should fail with exit code 2 due to ValueError (lines 168-170)
     assert result.exit_code == 2
     assert "target=source" in result.stdout or "Invalid" in result.stdout
+
+
+def test_validate_all_rows_invalid_warning(tmp_path: Path) -> None:
+    """Test validate warns when all rows are invalid but schema is correct."""
+    # Create CSV with correct columns but all invalid data
+    csv_path = _write_csv(
+        tmp_path,
+        "all_invalid.csv",
+        "date,product,region,revenue,cost,units\n"
+        "invalid-date,Widget,US,100,40,10\n"
+        "also-invalid,Gadget,EU,200,80,20\n",
+    )
+    out_dir = tmp_path / "all_invalid_out"
+
+    result = runner.invoke(app, ["validate", "--input", str(csv_path), "--out-dir", str(out_dir)])
+
+    # Should pass schema validation (exit 0) but show warning
+    assert result.exit_code == 0
+    assert "cleaned dataset is empty" in result.stdout
+    qc = json.loads((out_dir / "qc_report.json").read_text())
+    assert qc["rows_out"] == 0
+    assert qc["rows_in"] > 0
+
+
+def test_load_profile_map_read_error_raises_value_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test profile read OSError is converted to ValueError."""
+    profile_path = tmp_path / "profile.txt"
+    profile_path.write_text("revenue=Sales\n")
+
+    def _raise_oserror(self: Path, *, encoding: str = "utf-8") -> str:
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(Path, "read_text", _raise_oserror)
+
+    with pytest.raises(ValueError, match="Cannot read profile"):
+        cli_mod._load_profile_map(profile_path)
+
+
+def test_apply_column_map_empty_mapping_returns_same_df() -> None:
+    """Test helper returns original dataframe when mapping is empty."""
+    df = pd.DataFrame({"date": ["2024-01-01"], "revenue": [100]})
+    result = cli_mod._apply_column_map(df, {})
+    assert result is df
+
+
+def test_run_nonquiet_with_profile_shows_profile_line(tmp_path: Path) -> None:
+    """Test run in non-quiet mode prints the profile path when provided."""
+    profile_path = tmp_path / "profile.txt"
+    profile_path.write_text("revenue=Sales\n")
+
+    csv_path = _write_csv(
+        tmp_path,
+        "sales.csv",
+        "date,product,region,Sales,cost,units\n2024-01-01,Widget,US,100,40,10\n",
+    )
+    out_dir = tmp_path / "run_profile_verbose"
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--input",
+            str(csv_path),
+            "--out-dir",
+            str(out_dir),
+            "--profile",
+            str(profile_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Using profile:" in result.stdout
+
+
+def test_run_load_table_value_error_exits(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Test run exits with code 2 if load_table raises ValueError."""
+    input_path = tmp_path / "input.csv"
+    input_path.write_text("date,product,region,revenue,cost,units\n")
+    out_dir = tmp_path / "run_load_error"
+
+    def _raise_value_error(_: Path) -> pd.DataFrame:
+        raise ValueError("bad file format")
+
+    monkeypatch.setattr(cli_mod, "load_table", _raise_value_error)
+
+    result = runner.invoke(
+        app,
+        ["run", "--input", str(input_path), "--out-dir", str(out_dir)],
+    )
+
+    assert result.exit_code == 2
+    assert "bad file format" in result.stdout
+
+
+def test_validate_nonquiet_with_profile_shows_profile_line(tmp_path: Path) -> None:
+    """Test validate in non-quiet mode prints the profile path when provided."""
+    profile_path = tmp_path / "profile.txt"
+    profile_path.write_text("revenue=Sales\n")
+
+    csv_path = _write_csv(
+        tmp_path,
+        "sales.csv",
+        "date,product,region,Sales,cost,units\n2024-01-01,Widget,US,100,40,10\n",
+    )
+    out_dir = tmp_path / "validate_profile_verbose"
+
+    result = runner.invoke(
+        app,
+        [
+            "validate",
+            "--input",
+            str(csv_path),
+            "--out-dir",
+            str(out_dir),
+            "--profile",
+            str(profile_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Using profile:" in result.stdout
+
+
+def test_validate_load_table_value_error_exits(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Test validate exits with code 2 if load_table raises ValueError."""
+    input_path = tmp_path / "input.csv"
+    input_path.write_text("date,product,region,revenue,cost,units\n")
+    out_dir = tmp_path / "validate_load_error"
+
+    def _raise_value_error(_: Path) -> pd.DataFrame:
+        raise ValueError("bad file format")
+
+    monkeypatch.setattr(cli_mod, "load_table", _raise_value_error)
+
+    result = runner.invoke(
+        app,
+        ["validate", "--input", str(input_path), "--out-dir", str(out_dir)],
+    )
+
+    assert result.exit_code == 2
+    assert "bad file format" in result.stdout
