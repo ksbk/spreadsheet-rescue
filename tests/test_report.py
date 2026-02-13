@@ -280,6 +280,37 @@ def test_excel_value_escapes_formula_like_strings() -> None:
     assert escaped == "'=SUM(A1:A2)"
 
 
+def test_excel_value_preserves_apostrophe_prefixed_strings() -> None:
+    value = "'=SUM(A1:A2)"
+    assert report_mod._excel_value(value) == value
+
+
+def test_excel_value_drops_timezone_from_datetime() -> None:
+    val = datetime(2024, 1, 1, 8, 0, tzinfo=timezone.utc)
+    normalized = report_mod._excel_value(val)
+    assert isinstance(normalized, datetime)
+    assert normalized.tzinfo is None
+
+
+def test_unique_table_name_handles_missing_parent() -> None:
+    class NoParent:
+        parent = None
+
+    assert report_mod._unique_table_name(NoParent(), "BaseName") == "BaseName"  # type: ignore[arg-type]
+
+
+def test_unique_table_name_skips_existing_suffix_and_increments() -> None:
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+
+    report_mod._add_excel_table(ws, "DupName", ncols=2, nrows=1)
+    report_mod._add_excel_table(ws, "DupName", ncols=2, nrows=1)
+
+    next_name = report_mod._unique_table_name(ws, "DupName")
+    assert next_name.endswith("_2")
+
+
 def test_df_to_sheet_non_table_sets_auto_filter() -> None:
     wb = Workbook()
     wb.remove(wb.active)

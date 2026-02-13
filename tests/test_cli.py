@@ -613,6 +613,36 @@ def test_validate_duplicate_columns_after_mapping_fails_with_artifacts(tmp_path:
     assert (out_dir / "run_manifest.json").exists()
 
 
+def test_run_duplicate_columns_after_mapping_fails_with_artifacts(tmp_path: Path) -> None:
+    csv_path = _write_csv(
+        tmp_path,
+        "dup_run.csv",
+        "date,product,region,revenue,Sales,cost,units\n2024-01-01,Widget,US,100,200,40,1\n",
+    )
+    out_dir = tmp_path / "dup_run_out"
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--input",
+            str(csv_path),
+            "--out-dir",
+            str(out_dir),
+            "--map",
+            "revenue=Sales",
+            "--quiet",
+        ],
+    )
+
+    assert result.exit_code == 2
+    qc = json.loads((out_dir / "qc_report.json").read_text())
+    assert qc["rows_out"] == 0
+    assert any("Duplicate columns after normalization/mapping" in w for w in qc["warnings"])
+    assert (out_dir / "run_manifest.json").exists()
+    assert not (out_dir / "Final_Report.xlsx").exists()
+
+
 def test_validate_directory_input_path_fails_without_traceback(tmp_path: Path) -> None:
     bad_input = tmp_path / "fake.csv"
     bad_input.mkdir()

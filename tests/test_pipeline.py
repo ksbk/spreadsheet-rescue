@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from spreadsheet_rescue import pipeline as pipeline_mod
 from spreadsheet_rescue.pipeline import (
     clean_dataframe,
     compute_dashboard_kpis,
@@ -320,3 +321,40 @@ def test_invalid_number_locale_raises_value_error() -> None:
 
     with pytest.raises(ValueError, match="Invalid number locale"):
         clean_dataframe(df, number_locale="invalid")  # type: ignore[arg-type]
+
+
+def test_count_ambiguous_dates_returns_zero_when_no_slash_dates() -> None:
+    series = pd.Series(["2024-01-01", "not-a-date", None], dtype="string")
+    assert pipeline_mod._count_ambiguous_day_month_dates(series) == 0
+
+
+def test_count_ambiguous_dates_handles_empty_series() -> None:
+    series = pd.Series([], dtype="string")
+    assert pipeline_mod._count_ambiguous_day_month_dates(series) == 0
+
+
+def test_normalize_numeric_token_exercises_locale_specific_branches() -> None:
+    assert pipeline_mod._normalize_numeric_token("+1,234", locale="us") == "1234"
+    assert pipeline_mod._normalize_numeric_token("1,234,56", locale="eu") == "1,234,56"
+    assert pipeline_mod._normalize_numeric_token("1.234", locale="eu") == "1234"
+
+
+def test_normalize_numeric_token_exercises_auto_comma_and_dot_branches() -> None:
+    assert pipeline_mod._normalize_numeric_token("1,234", locale="auto") == "1234"
+    assert pipeline_mod._normalize_numeric_token("1234,567", locale="auto") == "1234567"
+    assert pipeline_mod._normalize_numeric_token("1,234,56", locale="auto") == "1234.56"
+    assert pipeline_mod._normalize_numeric_token("1.234", locale="auto") == "1234"
+    assert pipeline_mod._normalize_numeric_token("1,2,3", locale="auto") == "1,2,3"
+
+
+def test_coerce_numeric_value_handles_isna_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _boom(_: object) -> bool:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(pipeline_mod.pd, "isna", _boom)
+    out = pipeline_mod._coerce_numeric_value(object(), locale="auto")
+    assert isinstance(out, str)
+
+
+def test_coerce_numeric_value_returns_none_for_missing_values() -> None:
+    assert pipeline_mod._coerce_numeric_value(pd.NA, locale="auto") is None

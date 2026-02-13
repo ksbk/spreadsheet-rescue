@@ -9,6 +9,12 @@ import pytest
 from spreadsheet_rescue.io import load_table, write_json
 
 
+def test_load_table_missing_file_raises_file_not_found(tmp_path: Path) -> None:
+    missing = tmp_path / "does_not_exist.csv"
+    with pytest.raises(FileNotFoundError, match="Input file not found"):
+        load_table(missing)
+
+
 def test_load_table_csv_uses_sniffing_and_string_dtype(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -145,6 +151,72 @@ def test_load_table_csv_wraps_parser_error(monkeypatch: pytest.MonkeyPatch, tmp_
 
     with pytest.raises(ValueError, match="decode or parse failed"):
         load_table(csv_path)
+
+
+def test_load_table_csv_wraps_oserror(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    csv_path = tmp_path / "broken.csv"
+    csv_path.write_text("a,b\n1,2\n", encoding="utf-8")
+
+    def _fake_read_csv(path: Path, **kwargs: object) -> pd.DataFrame:
+        del path, kwargs
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(pd, "read_csv", _fake_read_csv)
+
+    with pytest.raises(ValueError, match="Could not read CSV"):
+        load_table(csv_path)
+
+
+def test_load_table_xlsx_missing_openpyxl_raises_friendly_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    xlsx_path = tmp_path / "data.xlsx"
+    xlsx_path.write_bytes(b"x")
+
+    def _fake_read_excel(path: Path, **kwargs: object) -> pd.DataFrame:
+        del path, kwargs
+        raise ImportError("No module named openpyxl")
+
+    monkeypatch.setattr(pd, "read_excel", _fake_read_excel)
+
+    with pytest.raises(ValueError, match="openpyxl"):
+        load_table(xlsx_path)
+
+
+def test_load_table_xlsx_wraps_oserror(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    xlsx_path = tmp_path / "data.xlsx"
+    xlsx_path.write_bytes(b"x")
+
+    def _fake_read_excel(path: Path, **kwargs: object) -> pd.DataFrame:
+        del path, kwargs
+        raise OSError("read failed")
+
+    monkeypatch.setattr(pd, "read_excel", _fake_read_excel)
+
+    with pytest.raises(ValueError, match="Could not read Excel file"):
+        load_table(xlsx_path)
+
+
+def test_load_table_xls_wraps_oserror(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    xls_path = tmp_path / "legacy.xls"
+    xls_path.write_bytes(b"x")
+
+    def _fake_read_excel(path: Path, **kwargs: object) -> pd.DataFrame:
+        del path, kwargs
+        raise OSError("read failed")
+
+    monkeypatch.setattr(pd, "read_excel", _fake_read_excel)
+
+    with pytest.raises(ValueError, match="Could not read Excel file"):
+        load_table(xls_path)
+
+
+def test_load_table_rejects_unsupported_suffix(tmp_path: Path) -> None:
+    txt_path = tmp_path / "data.txt"
+    txt_path.write_text("hello", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Unsupported file type"):
+        load_table(txt_path)
 
 
 def test_load_table_csv_bom_reads_headers_correctly(tmp_path: Path) -> None:
