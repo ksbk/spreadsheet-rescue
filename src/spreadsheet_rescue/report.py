@@ -8,7 +8,7 @@ from typing import Any
 
 import pandas as pd
 from openpyxl import Workbook
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side, numbers
+from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.worksheet.table import Table, TableStyleInfo
@@ -176,7 +176,7 @@ def _write_dashboard(wb: Workbook, kpis: dict, qc: QCReport) -> None:
 def write_report(
     out_dir: Path,
     clean_df: pd.DataFrame,
-    kpis: dict,
+    kpis: dict[str, Any],
     weekly: pd.DataFrame,
     top_products: pd.DataFrame,
     top_regions: pd.DataFrame,

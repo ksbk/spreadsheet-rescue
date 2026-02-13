@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pandas as pd
 
 from spreadsheet_rescue import REQUIRED_COLUMNS
 from spreadsheet_rescue.models import QCReport
-
 
 # ── Header normalisation ────────────────────────────────────────
 
 
 def _normalize_headers(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    df.columns = [c.strip().lower() for c in df.columns]
+    df.columns = pd.Index([c.strip().lower() for c in df.columns])
     return df
 
 
@@ -131,7 +132,7 @@ def compute_top_regions(df: pd.DataFrame, n: int = 10) -> pd.DataFrame:
     )
 
 
-def compute_dashboard_kpis(df: pd.DataFrame) -> dict:
+def compute_dashboard_kpis(df: pd.DataFrame) -> dict[str, Any]:
     """Return a dict of top-level KPIs for the Dashboard sheet."""
     if df.empty:
         return {
