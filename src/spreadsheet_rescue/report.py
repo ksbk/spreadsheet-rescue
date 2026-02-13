@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import re
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
-from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.worksheet.table import Table, TableStyleInfo
+from openpyxl.worksheet.worksheet import Worksheet
 
 from spreadsheet_rescue.models import QCReport
 
@@ -32,21 +34,28 @@ KPI_FILL = PatternFill(start_color="D6E4F0", end_color="D6E4F0", fill_type="soli
 
 CURRENCY_FMT = '#,##0.00'
 INT_FMT = '#,##0'
-PCT_FMT = '0.0"%"'
+# Profit Margin % is passed in as percent-points from pipeline (e.g., 25.53),
+# so we append a literal percent sign instead of Excel percent scaling.
+PCT_FMT = '0.00"%"'
+DATE_FMT = 'yyyy-mm-dd'
 
 # Column-name → format mapping for data sheets
 _COL_FORMATS: dict[str, str] = {
+    "date": DATE_FMT,
+    "week": DATE_FMT,
     "revenue": CURRENCY_FMT,
     "cost": CURRENCY_FMT,
     "profit": CURRENCY_FMT,
     "units": INT_FMT,
 }
 
+_AUTO_WIDTH_SAMPLE_ROWS = 300
+
 
 # ── Helpers ──────────────────────────────────────────────────────
 
 
-def _style_header(ws, ncols: int) -> None:
+def _style_header(ws: Worksheet, ncols: int) -> None:
     for c in range(1, ncols + 1):
         cell = ws.cell(row=1, column=c)
         cell.font = HEADER_FONT
@@ -54,30 +63,69 @@ def _style_header(ws, ncols: int) -> None:
         cell.alignment = HEADER_ALIGN
 
 
-def _auto_width(ws) -> None:
-    for col_cells in ws.columns:
-        letter = col_cells[0].column_letter
-        width = max(len(str(c.value or "")) for c in col_cells) + 4
+def _auto_width(ws: Worksheet) -> None:
+    max_row = min(ws.max_row, _AUTO_WIDTH_SAMPLE_ROWS + 1)  # include header row
+    for c_idx in range(1, ws.max_column + 1):
+        letter = get_column_letter(c_idx)
+        width = 0
+        for row in ws.iter_rows(min_row=1, max_row=max_row, min_col=c_idx, max_col=c_idx):
+            cell = row[0]
+            width = max(width, len(str(cell.value or "")))
+        width += 4
         ws.column_dimensions[letter].width = min(width, 30)
 
 
-def _apply_number_formats(ws, col_names: list[str]) -> None:
+def _apply_number_formats(ws: Worksheet, col_names: list[str]) -> None:
     """Apply number formats to data columns (rows 2+) by column name."""
+    if ws.max_row < 2:
+        return
+
     for c_idx, name in enumerate(col_names, 1):
         fmt = _COL_FORMATS.get(name.lower())
         if fmt:
-            for row in ws.iter_rows(min_row=2, min_col=c_idx, max_col=c_idx):
+            for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=c_idx, max_col=c_idx):
                 for cell in row:
                     cell.number_format = fmt
 
 
-def _add_excel_table(ws, name: str, ncols: int, nrows: int) -> None:
+def _sanitize_table_name(name: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_]", "_", name)
+    if not cleaned:
+        cleaned = "Table"
+    if not re.match(r"^[A-Za-z_]", cleaned):
+        cleaned = f"_{cleaned}"
+    return cleaned[:255]
+
+
+def _unique_table_name(ws: Worksheet, base_name: str) -> str:
+    parent = ws.parent
+    if parent is None:
+        return base_name
+
+    existing: set[str] = set()
+    for sheet in parent.worksheets:
+        existing.update(cast(Iterable[str], sheet.tables.keys()))
+    if base_name not in existing:
+        return base_name
+
+    suffix = 1
+    while True:
+        suffix_str = f"_{suffix}"
+        candidate = f"{base_name[: 255 - len(suffix_str)]}{suffix_str}"
+        if candidate not in existing:
+            return candidate
+        suffix += 1
+
+
+def _add_excel_table(ws: Worksheet, name: str, ncols: int, nrows: int) -> None:
     """Turn the data range into a proper Excel Table object."""
-    if nrows < 1:
+    if nrows < 1 or ncols < 1:
         return
     end_col = get_column_letter(ncols)
     ref = f"A1:{end_col}{nrows + 1}"  # +1 for header
-    table = Table(displayName=name, ref=ref)
+    safe_base = _sanitize_table_name(name)
+    table_name = _unique_table_name(ws, safe_base)
+    table = Table(displayName=table_name, ref=ref)
     table.tableStyleInfo = TableStyleInfo(
         name="TableStyleMedium9", showFirstColumn=False,
         showLastColumn=False, showRowStripes=True, showColumnStripes=False,
@@ -85,24 +133,42 @@ def _add_excel_table(ws, name: str, ncols: int, nrows: int) -> None:
     ws.add_table(table)
 
 
+def _excel_value(val: Any) -> Any:
+    try:
+        if pd.isna(val):
+            return None
+    except Exception:
+        return val
+    return val
+
+
 def _df_to_sheet(
     wb: Workbook, name: str, df: pd.DataFrame, *, as_table: bool = False,
 ) -> None:
     ws = wb.create_sheet(title=name)
     col_names = list(df.columns)
-    for r, row in enumerate(dataframe_to_rows(df, index=False, header=True), 1):
-        for c, val in enumerate(row, 1):
-            ws.cell(row=r, column=c, value=val)
+
+    if not col_names:
+        ws.cell(row=1, column=1, value="No data").font = VALUE_FONT
+        ws.column_dimensions["A"].width = 18
+        return
+
+    for c_idx, col_name in enumerate(col_names, 1):
+        ws.cell(row=1, column=c_idx, value=col_name)
+    for r_idx, row_vals in enumerate(df.itertuples(index=False, name=None), 2):
+        for c_idx, val in enumerate(row_vals, 1):
+            ws.cell(row=r_idx, column=c_idx, value=_excel_value(val))
     _style_header(ws, len(col_names))
     _apply_number_formats(ws, col_names)
     ws.freeze_panes = "A2"
+    if (not as_table) and (len(df) > 0):
+        ws.auto_filter.ref = ws.dimensions
     _auto_width(ws)
     if as_table and len(df) > 0:
-        safe_name = name.replace(" ", "_").replace("-", "_")
-        _add_excel_table(ws, safe_name, len(col_names), len(df))
+        _add_excel_table(ws, name, len(col_names), len(df))
 
 
-def _write_dashboard(wb: Workbook, kpis: dict, qc: QCReport) -> None:
+def _write_dashboard(wb: Workbook, kpis: dict[str, Any], qc: QCReport) -> None:
     ws = wb.create_sheet(title="Dashboard")
 
     # ── Title ────────────────────────────────────────────────────
@@ -131,7 +197,7 @@ def _write_dashboard(wb: Workbook, kpis: dict, qc: QCReport) -> None:
                 ws.cell(row=row, column=c).fill = NOTE_FILL
             row += 1
     else:
-        ws.cell(row=row, column=1, value="No warnings").font = WARN_FONT
+        ws.cell(row=row, column=1, value="No warnings").font = VALUE_FONT
         for c in range(1, 5):
             ws.cell(row=row, column=c).fill = NOTE_FILL
         row += 1
@@ -139,8 +205,9 @@ def _write_dashboard(wb: Workbook, kpis: dict, qc: QCReport) -> None:
     # ── KPI cards ────────────────────────────────────────────────
     row += 1
     ws.cell(row=row, column=1, value="Key Metrics").font = LABEL_FONT
-    ws.cell(row=row, column=1).fill = KPI_FILL
-    ws.cell(row=row, column=2).fill = KPI_FILL
+    ws.merge_cells(f"A{row}:D{row}")
+    for c in range(1, 5):
+        ws.cell(row=row, column=c).fill = KPI_FILL
     row += 1
 
     kpi_formats: dict[str, str | None] = {
@@ -151,8 +218,13 @@ def _write_dashboard(wb: Workbook, kpis: dict, qc: QCReport) -> None:
         "Top Product": None,
         "Top Region": None,
     }
+    ordered_labels = list(kpi_formats.keys())
+    extras = sorted(label for label in kpis if label not in kpi_formats)
 
-    for label, value in kpis.items():
+    for label in [*ordered_labels, *extras]:
+        if label not in kpis:
+            continue
+        value = kpis[label]
         lbl_cell = ws.cell(row=row, column=1, value=label)
         lbl_cell.font = LABEL_FONT
         lbl_cell.fill = KPI_FILL
@@ -162,6 +234,7 @@ def _write_dashboard(wb: Workbook, kpis: dict, qc: QCReport) -> None:
         fmt = kpi_formats.get(label)
         if fmt:
             val_cell.number_format = fmt
+            val_cell.alignment = Alignment(horizontal="right")
         row += 1
 
     ws.column_dimensions["A"].width = 22
@@ -191,30 +264,26 @@ def write_report(
     report_path = out_dir / "Final_Report.xlsx"
 
     wb = Workbook()
-    wb.remove(wb.active)  # remove default sheet
+    active_sheet = wb.active
+    if active_sheet is not None:
+        wb.remove(active_sheet)  # remove default sheet
 
     # Dashboard (with QC notes)
     _write_dashboard(wb, kpis, qc)
 
     # Weekly
-    w = weekly.copy()
-    if "week" in w.columns:
-        w["week"] = pd.to_datetime(w["week"]).dt.strftime("%Y-%m-%d")
-    _df_to_sheet(wb, "Weekly", w)
+    _df_to_sheet(wb, "Weekly", weekly, as_table=True)
 
     # Top_Products
-    _df_to_sheet(wb, "Top_Products", top_products)
+    _df_to_sheet(wb, "Top_Products", top_products, as_table=True)
 
     # Top_Regions
-    _df_to_sheet(wb, "Top_Regions", top_regions)
+    _df_to_sheet(wb, "Top_Regions", top_regions, as_table=True)
 
     # Clean_Data (as Excel Table)
-    cd = clean_df.copy()
-    if "date" in cd.columns:
-        cd["date"] = cd["date"].dt.strftime("%Y-%m-%d")
-    if "week" in cd.columns:
-        cd["week"] = pd.to_datetime(cd["week"]).dt.strftime("%Y-%m-%d")
-    _df_to_sheet(wb, "Clean_Data", cd, as_table=True)
+    _df_to_sheet(wb, "Clean_Data", clean_df, as_table=True)
 
-    wb.save(report_path)
+    tmp_path = out_dir / "Final_Report.tmp.xlsx"
+    wb.save(tmp_path)
+    tmp_path.replace(report_path)
     return report_path
