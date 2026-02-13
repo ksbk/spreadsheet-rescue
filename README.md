@@ -63,7 +63,7 @@ This creates a real **time + error tax**. The work is repetitive, deadline-drive
 
 `spreadsheet-rescue` is a **CLI-first Python tool** that:
 
-1. **Loads** a CSV/XLSX export
+1. **Loads** a CSV/XLSX/XLS export
 2. **Normalizes + cleans** core fields (dates, numerics, text)
 3. **Computes KPIs** and summary tables (weekly totals, top categories)
 4. **Writes** a professional Excel report
@@ -116,7 +116,7 @@ You'll find:
 Pipeline (v0.1):
 
 ```
-Load table (CSV/XLSX)
+Load table (CSV/XLSX/XLS)
   → Normalize headers
   → Type coercion (date + numerics)
   → Drop invalid rows (with warnings)
