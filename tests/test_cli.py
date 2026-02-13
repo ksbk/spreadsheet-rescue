@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 import pytest
+from openpyxl import load_workbook
 from typer.testing import CliRunner
 
 import spreadsheet_rescue.cli as cli_mod
@@ -14,12 +16,17 @@ from spreadsheet_rescue.cli import app
 from spreadsheet_rescue.models import QCReport
 
 runner = CliRunner()
+FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 
 
 def _write_csv(tmp_path: Path, name: str, rows: str) -> Path:
     path = tmp_path / name
     path.write_text(rows)
     return path
+
+
+def _fixture_path(name: str) -> Path:
+    return FIXTURES_DIR / name
 
 
 def test_validate_pass_writes_artifacts(tmp_path: Path) -> None:
@@ -343,6 +350,96 @@ def test_validate_passes_date_and_number_parse_flags(
     assert result.exit_code == 0
     assert captured["dayfirst"] is True
     assert captured["number_locale"] == "eu"
+
+
+def test_run_dayfirst_mode_changes_clean_data_date_with_fixture(tmp_path: Path) -> None:
+    input_file = _fixture_path("ambiguous_dates.csv")
+    out_monthfirst = tmp_path / "monthfirst_out"
+    out_dayfirst = tmp_path / "dayfirst_out"
+
+    result_monthfirst = runner.invoke(
+        app,
+        [
+            "run",
+            "--input",
+            str(input_file),
+            "--out-dir",
+            str(out_monthfirst),
+            "--monthfirst",
+            "--quiet",
+        ],
+    )
+    result_dayfirst = runner.invoke(
+        app,
+        [
+            "run",
+            "--input",
+            str(input_file),
+            "--out-dir",
+            str(out_dayfirst),
+            "--dayfirst",
+            "--quiet",
+        ],
+    )
+
+    assert result_monthfirst.exit_code == 0
+    assert result_dayfirst.exit_code == 0
+
+    month_wb = load_workbook(out_monthfirst / "Final_Report.xlsx")
+    day_wb = load_workbook(out_dayfirst / "Final_Report.xlsx")
+    month_ws = month_wb["Clean_Data"]
+    day_ws = day_wb["Clean_Data"]
+
+    headers = [month_ws.cell(row=1, column=c).value for c in range(1, month_ws.max_column + 1)]
+    date_col = headers.index("date") + 1
+
+    month_value = month_ws.cell(row=2, column=date_col).value
+    day_value = day_ws.cell(row=2, column=date_col).value
+    assert isinstance(month_value, datetime)
+    assert isinstance(day_value, datetime)
+    assert month_value.strftime("%Y-%m-%d") == "2024-01-02"
+    assert day_value.strftime("%Y-%m-%d") == "2024-02-01"
+
+
+def test_validate_number_locale_flag_changes_rows_out_with_fixture(tmp_path: Path) -> None:
+    input_file = _fixture_path("eu_numeric.csv")
+    out_eu = tmp_path / "eu_mode_out"
+    out_us = tmp_path / "us_mode_out"
+
+    result_eu = runner.invoke(
+        app,
+        [
+            "validate",
+            "--input",
+            str(input_file),
+            "--out-dir",
+            str(out_eu),
+            "--number-locale",
+            "eu",
+            "--quiet",
+        ],
+    )
+    result_us = runner.invoke(
+        app,
+        [
+            "validate",
+            "--input",
+            str(input_file),
+            "--out-dir",
+            str(out_us),
+            "--number-locale",
+            "us",
+            "--quiet",
+        ],
+    )
+
+    assert result_eu.exit_code == 0
+    assert result_us.exit_code == 0
+
+    qc_eu = json.loads((out_eu / "qc_report.json").read_text())
+    qc_us = json.loads((out_us / "qc_report.json").read_text())
+    assert qc_eu["rows_out"] == 1
+    assert qc_us["rows_out"] == 0
 
 
 def test_map_invalid_format_fails(tmp_path: Path) -> None:

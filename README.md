@@ -1,9 +1,18 @@
 # 📊 spreadsheet-rescue — Clean Messy Spreadsheets into Client-Ready Reports
+[![CI](https://github.com/kusseba/spreadsheet-rescue/actions/workflows/ci.yml/badge.svg)](https://github.com/kusseba/spreadsheet-rescue/actions/workflows/ci.yml)
 
 **Turn dirty CSV/XLSX exports into a polished Excel KPI report in one command — with QC + run manifests for trust and repeatability.**
 
 > **Local-first. No data leaves your machine.**
 > Built for freelancers, analysts, and SMEs who waste hours cleaning spreadsheets every week.
+
+### What's New in v0.1.1
+
+* Added explicit parse controls: `--dayfirst/--monthfirst` and `--number-locale auto|us|eu`
+* Hardened validation: duplicate columns now fail early with QC + manifest artifacts
+* Fixed locale numeric corruption edge cases (notably `1.200,50`-style inputs)
+* Escaped formula-like cell values in Excel output for safer sharing
+* Added CI workflow (`ruff` + `mypy` + `pytest`) and tracked `uv.lock` for reproducibility
 
 ### 60-second demo
 
