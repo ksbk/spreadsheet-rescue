@@ -13,6 +13,8 @@ venv/
 # Testing
 .coverage
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 htmlcov/
 
 # Output
