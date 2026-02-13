@@ -1,39 +1,38 @@
 # 📊 spreadsheet-rescue — Clean Messy Spreadsheets into Client-Ready Reports
-[![CI](https://github.com/kusseba/spreadsheet-rescue/actions/workflows/ci.yml/badge.svg)](https://github.com/kusseba/spreadsheet-rescue/actions/workflows/ci.yml)
+[![CI](https://github.com/ksbk/spreadsheet-rescue/actions/workflows/ci.yml/badge.svg)](https://github.com/ksbk/spreadsheet-rescue/actions/workflows/ci.yml)
 
-**Turn dirty CSV/XLSX exports into a polished Excel KPI report in one command — with QC + run manifests for trust and repeatability.**
+**Turn messy CSV/XLSX exports into a clean dataset and a client-ready Excel KPI pack in one command.**
 
-> **Local-first. No data leaves your machine.**
-> Built for freelancers, analysts, and SMEs who waste hours cleaning spreadsheets every week.
+You get:
+* `Clean_Data` + deterministic type coercion (dates, numerics, text)
+* `Weekly`, `Top_Products`, `Top_Regions`, and `Dashboard` sheets in `Final_Report.xlsx`
+* `qc_report.json` + `run_manifest.json` for trust, replay, and audit trail
 
-### What's New in v0.1.1
-
-* Added explicit parse controls: `--dayfirst/--monthfirst` and `--number-locale auto|us|eu`
-* Hardened validation: duplicate columns now fail early with QC + manifest artifacts
-* Fixed locale numeric corruption edge cases (notably `1.200,50`-style inputs)
-* Escaped formula-like cell values in Excel output for safer sharing
-* Added CI workflow (`ruff` + `mypy` + `pytest`) and tracked `uv.lock` for reproducibility
-
-### 60-second demo
+### 30-second quickstart
 
 ```bash
 pip install -e .
-srescue validate -i demo/before.csv --out-dir demo/output   # preflight check
-srescue run      -i demo/before.csv --out-dir demo/output   # full pipeline
+./scripts/demo.sh
+```
+
+Output:
+
+```
+output/demo_run/
+  Final_Report.xlsx
+  qc_report.json
+  run_manifest.json
 ```
 
 ![Dashboard](demo/after_dashboard.png)
 
-**What comes out:**
+### What We Don't Do
 
-```
-demo/output/
-  Final_Report.xlsx    ← Dashboard + Weekly + Top Products/Regions + Clean Data
-  qc_report.json       ← rows in/out, dropped count, warnings
-  run_manifest.json    ← version, input SHA-256, timestamps
-```
+* We do not guess silently on ambiguous date/numeric values; warnings are emitted.
+* We do not infer missing business logic (tax rules, currency conversion, custom KPI formulas).
+* We do not sanitize free-form spreadsheet models outside exported tabular input.
 
-> **Need your spreadsheets cleaned?** [Hire me](#hire--contact) — I deliver a repeatable tool + QC report + audit trail.
+> **Local-first.** No data leaves your machine.
 
 ---
 
@@ -99,7 +98,7 @@ This is designed to be easy to hand off to clients and easy to rerun on next wee
 ### Install (editable)
 
 ```bash
-git clone https://github.com/kusseba/spreadsheet-rescue.git
+git clone https://github.com/ksbk/spreadsheet-rescue.git
 cd spreadsheet-rescue
 pip install -e .
 ```
@@ -107,7 +106,7 @@ pip install -e .
 ### Run the example
 
 ```bash
-srescue run -i examples/raw_sales.csv --out-dir output/demo_run
+./scripts/demo.sh
 ```
 
 You'll find:
@@ -115,6 +114,7 @@ You'll find:
 * `output/demo_run/Final_Report.xlsx`
 * `output/demo_run/qc_report.json`
 * `output/demo_run/run_manifest.json`
+* walkthrough: `docs/demo/DEMO.md`
 
 ---
 
@@ -150,6 +150,12 @@ Every successful run MUST produce:
 
 This contract is intentionally stable so you can build workflows (or a future web UI) on top without refactoring downstream usage.
 
+### Failure contract
+
+* Validation/input failures (`exit 2`) write `qc_report.json` + `run_manifest.json` and do not write `Final_Report.xlsx`.
+* Unexpected/internal failures (`exit 1`) also write `qc_report.json` + `run_manifest.json`.
+* QC warnings explain what to fix next (for example, missing columns, duplicate mappings, ambiguous date/numeric inputs).
+
 ---
 
 ## QC & Reliability
@@ -160,6 +166,8 @@ This contract is intentionally stable so you can build workflows (or a future we
 * Duplicate columns after header normalization / `--map` → **hard fail** (exit code `2`)
 * Invalid dates/numbers → dropped rows + warnings (recorded in QC report)
 * Ambiguous dates like `01/02/2024` → warning with parse mode (`MM/DD` or `DD/MM`)
+* EU decimal commas (for example `1.200,50`, `200,25`) are detected and counted per numeric column
+* Ambiguous numeric tokens (for example `1,234`) emit warnings and use deterministic parsing rules
 * Empty cleaned dataset → warning (report still emitted if possible)
 * Formula-like text values in Excel output are escaped for safety
 
@@ -167,6 +175,7 @@ This contract is intentionally stable so you can build workflows (or a future we
 
 * `0` success
 * `2` validation/input failure (missing/duplicate columns, unreadable input)
+* `1` unexpected/internal failure (still writes QC + manifest)
 
 ---
 
@@ -221,6 +230,12 @@ Supported values:
 * `us` — comma thousands, dot decimals (e.g., `1,200.50`)
 * `eu` — dot thousands, comma decimals (e.g., `1.200,50`)
 
+`auto` policy:
+* `1.234,56` → `1234.56`
+* `1,234.56` → `1234.56`
+* `1234,56` → `1234.56`
+* `1,234` is treated as ambiguous and reported in QC warnings; parsing stays deterministic.
+
 ### Validate-only mode
 
 Preflight check — writes QC + manifest without producing the Excel report:
@@ -229,7 +244,7 @@ Preflight check — writes QC + manifest without producing the Excel report:
 srescue validate -i data.csv --out-dir output
 ```
 
-Exit `0` = OK, exit `2` = validation/input failure.
+Exit `0` = OK, `2` = validation/input failure, `1` = unexpected/internal failure.
 
 ### Reproducible dev environment (uv)
 

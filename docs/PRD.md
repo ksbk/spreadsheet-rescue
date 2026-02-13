@@ -1,107 +1,134 @@
-# spreadsheet-rescue — Product Requirements Document
+# spreadsheet-rescue PRD (v0.1.1)
 
-> Internal living doc. README is client-facing.
+## Product promise
 
-## Vision
+Convert messy spreadsheet exports into a deterministic, client-ready Excel report plus QC artifacts, without silent KPI corruption.
 
-A CLI-first Python tool that turns messy CSV/XLSX exports into polished Excel KPI reports — with QC reports and run manifests for trust and repeatability. Designed for freelancers, analysts, and SMEs who waste hours cleaning spreadsheets every week.
+## Target users
 
-## Principles
+Freelancers, finance/admin/ops users, and SMB analysts who receive recurring CSV/XLSX exports and need trustworthy weekly reporting.
 
-1. **Local-first** — no data leaves the machine
-2. **Repeatable** — same input → same output, every time
-3. **Auditable** — QC report + run manifest on every run
-4. **Client-ready** — output is handoff-ready without manual formatting
-5. **CLI-first** — scriptable, composable, automatable
+## In-scope (v0.1.1)
 
-## Architecture
+* CLI commands: `srescue run`, `srescue validate`
+* Input formats: `.csv`, `.xlsx`, `.xls`
+* Output artifacts: `Final_Report.xlsx`, `qc_report.json`, `run_manifest.json`
+* Deterministic cleaning for required fields and KPI summaries
+* Safe Excel export (formula-like input escaped as text)
 
-```
-src/spreadsheet_rescue/
-  __init__.py      # version + REQUIRED_COLUMNS
-  models.py        # QCReport, RunManifest dataclasses
-  io.py            # load CSV/XLSX (dtype=str), write JSON
-  pipeline.py      # clean_dataframe, compute_* functions
-  report.py        # write Final_Report.xlsx (openpyxl)
-  qc.py            # write qc_report.json
-  utils.py         # sha256_file, utcnow_iso
-  cli.py           # typer app: run + validate commands
-  __main__.py      # python -m support
-```
+## Data contract
 
-## Required Columns (v0.1.1)
+### Required columns
 
-`date`, `product`, `region`, `revenue`, `cost`, `units`
+Normalized required headers:
+* `date`
+* `product`
+* `region`
+* `revenue`
+* `cost`
+* `units`
 
-Remappable via `--map target=source`.
+### Header normalization
 
-## Output Contract
+Normalization rules are applied to input headers and mapping keys:
+* `strip()` leading/trailing spaces
+* lowercase
+* collapse internal whitespace to `_`
 
-Every successful run produces:
+Examples:
+* `" Revenue "` -> `revenue`
+* `"Order Date"` -> `order_date`
 
-```
-<out_dir>/
-  Final_Report.xlsx    # Dashboard + Weekly + Top Products + Top Regions + Clean_Data
-  qc_report.json       # rows in/out, dropped count, warnings
-  run_manifest.json    # tool version, input SHA-256, timestamps
-```
+Duplicate normalized headers are a contract violation.
 
-## Exit Codes
+### Column mapping (`--map target=source`)
 
-| Code | Meaning |
-|------|---------|
-| 0    | Success |
-| 2    | Validation/input failure (missing/duplicate columns, unreadable input) |
+* Mapping is applied after source header normalization.
+* If mapping produces duplicate required targets, fail with exit `2`.
+* QC warning includes duplicate target and source provenance:
+  `Mapping produced duplicate columns: revenue (source: revenue + Sales).`
 
-## Pipeline Steps
+## Parsing policy
 
-1. Load table as `dtype=str` (safe coercion)
-2. Normalize headers (lowercase, strip, collapse spaces to `_`)
-3. Apply column map if `--map` provided
-4. Check required columns → hard fail if missing
-5. Coerce types: dates (`--dayfirst/--monthfirst`), numerics (`--number-locale`)
-6. Drop rows with invalid/missing required fields
-7. Add derived fields: `profit = revenue - cost`, `week`
-8. Sort by date
-9. Compute KPIs: total revenue, total cost, total profit, margin %, row count
-10. Compute weekly aggregation, top products, top regions
-11. Write Excel report with professional formatting
-12. Write QC report + run manifest
+### Date parsing
 
-## Excel Report Formatting (v0.1.1)
+* Parsing uses mixed-format datetime coercion with `errors="coerce"`.
+* Ambiguous day/month values (for example `01/02/2024`) are detected and warned.
+* Parse mode:
+  * default: `--monthfirst` (MM/DD)
+  * optional: `--dayfirst` (DD/MM)
+* Unparseable dates become null and affected rows are dropped.
+* Week grouping: pandas weekly period (`W`) ending Sunday; stored `week` is period `start_time` (Monday).
 
-- Number formats: `#,##0.00` (currency), `#,##0` (integers), `0.00"%"` (percent labels)
-- Freeze panes on all sheets (row 2)
-- Auto-fit column widths
-- Clean_Data as Excel Table (TableStyleMedium9)
-- Dashboard: QC Notes block (yellow fill) + KPI cards (blue fill)
-- Formula-like text values are escaped before writing to Excel cells
+### Numeric parsing
 
-## Roadmap
+Supported parse modes:
+* `--number-locale auto` (default)
+* `--number-locale us`
+* `--number-locale eu`
 
-### v0.2
+Deterministic conversions:
+* `1.234,56` -> `1234.56`
+* `1,234.56` -> `1234.56`
+* `1234,56` -> `1234.56`
 
-- Multi-file batch processing (`--input-dir`)
-- Rules YAML profiles (reusable cleaning configs)
-- PDF executive summary export
-- Stronger QC: outlier detection, duplicate rate, negative total warnings
+Ambiguity policy:
+* Ambiguous tokens (for example `1,234`) are never silent:
+  * QC warning emitted
+  * deterministic fallback parse applies (thousands-separator interpretation)
 
-### v0.3
+QC counters:
+* EU decimal comma detections are counted per numeric column (`revenue`, `cost`, `units`) and emitted as warnings.
 
-- Template library (sales, invoices, leads, inventory)
-- "Handover pack" generator (README + usage + maintenance docs)
-- Optional Streamlit upload UI (local-first)
+Invalid numeric values:
+* Coerced to null
+* Row dropped if required field becomes null
 
-## Tech Stack
+## Derived fields and KPIs
 
-- Python 3.10+
-- pandas ≥ 2.0 (tested on 3.0)
-- openpyxl ≥ 3.1
-- typer ≥ 0.9 + rich ≥ 13.0
-- Dev: ruff, mypy, pytest
+* `profit = revenue - cost`
+* `week = date.to_period("W").start_time`
+* Dashboard KPIs include total revenue/profit, profit margin, total units, top product, top region.
 
-## Known pandas 3.0 Gotchas
+Profit margin convention:
+* Stored as percent-points (for example `25.53`)
+* Excel format uses literal percent suffix: `0.00"%"` (no additional *100 scaling)
 
-- `infer_datetime_format` removed → use `format="mixed"`
-- `StringDtype` ≠ `"object"` → use `pd.api.types.is_numeric_dtype()`
-- `PeriodDtype` → use `.dt.start_time` not `.apply(lambda)`
+## Security requirements
+
+Excel formula sanitization:
+* Any string starting with `=`, `+`, `-`, or `@` is escaped before writing to workbook cells.
+* Goal: untrusted input must render as literal text, not executable formulas.
+
+## Output and failure contract
+
+### Success (`srescue run`)
+
+Must write:
+* `Final_Report.xlsx`
+* `qc_report.json`
+* `run_manifest.json`
+
+### Success (`srescue validate`)
+
+Must write:
+* `qc_report.json`
+* `run_manifest.json`
+
+### Failure behavior
+
+For input/validation failures and unexpected internal failures after startup:
+* always write `qc_report.json` and `run_manifest.json`
+* never emit raw traceback to users for contracted failures
+
+Exit codes:
+* `0` success
+* `2` input/contract violation (missing columns, duplicate columns, unreadable input, empty input)
+* `1` unexpected/internal failure
+
+## Non-goals (v0.1.1)
+
+* Schema inference beyond required-column contract
+* Business-specific rule engines (tax logic, FX conversions, account mappings)
+* Fully automatic locale detection without user override
+* Web UI / hosted processing

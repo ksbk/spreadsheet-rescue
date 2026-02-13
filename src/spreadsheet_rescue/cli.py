@@ -67,10 +67,6 @@ def _normalize_column_name(name: object) -> str:
     return re.sub(r"\s+", "_", str(name).strip().lower())
 
 
-def _find_duplicate_columns(columns: pd.Index) -> list[str]:
-    return sorted({str(col) for col in columns[columns.duplicated(keep=False)]})
-
-
 def _parse_column_map(raw: list[str] | None, *, quiet: bool = False) -> dict[str, str]:
     """Parse ``--map target=source`` pairs into ``{source: target}``."""
     if not raw:
@@ -122,6 +118,37 @@ def _apply_column_map(df: pd.DataFrame, mapping: dict[str, str]) -> pd.DataFrame
     if rename:
         df = df.rename(columns=rename)
     return df
+
+
+def _find_duplicate_target_sources(
+    columns: pd.Index, mapping: dict[str, str]
+) -> dict[str, list[str]]:
+    sources_by_target: dict[str, list[str]] = {}
+    for raw_col in columns:
+        raw_name = str(raw_col)
+        source_norm = _normalize_column_name(raw_col)
+        target = mapping.get(source_norm, source_norm)
+        sources_by_target.setdefault(target, []).append(raw_name)
+    return {
+        target: sources
+        for target, sources in sources_by_target.items()
+        if len(sources) > 1
+    }
+
+
+def _format_duplicate_columns_message(
+    duplicates: dict[str, list[str]], *, mapping_applied: bool
+) -> str:
+    prefix = (
+        "Mapping produced duplicate columns"
+        if mapping_applied
+        else "Duplicate columns after normalization"
+    )
+    details = []
+    for target in sorted(duplicates):
+        sources = " + ".join(duplicates[target])
+        details.append(f"{target} (source: {sources})")
+    return f"{prefix}: {'; '.join(details)}. Rename or remove one."
 
 
 def _write_manifest(out_dir: Path, input_file: Path, created_at: str, qc: QCReport) -> Path:
@@ -254,79 +281,89 @@ def run(
 
     echo(f"  {len(raw_df)} rows x {len(raw_df.columns)} columns")
 
-    if raw_df.empty:
-        qc = QCReport(rows_in=0, rows_out=0, warnings=["Input file has 0 rows."])
-        qc_path = write_qc_report(out_dir, qc)
-        manifest_path = _write_manifest(out_dir, input_file, created_at, qc)
-        _err("Input file has 0 rows.")
-        console.print(f"  QC report -> {qc_path}")
-        console.print(f"  Manifest  -> {manifest_path}")
-        raise typer.Exit(code=2)
+    try:
+        if raw_df.empty:
+            qc = QCReport(rows_in=0, rows_out=0, warnings=["Input file has 0 rows."])
+            qc_path = write_qc_report(out_dir, qc)
+            manifest_path = _write_manifest(out_dir, input_file, created_at, qc)
+            _err("Input file has 0 rows.")
+            console.print(f"  QC report -> {qc_path}")
+            console.print(f"  Manifest  -> {manifest_path}")
+            raise typer.Exit(code=2)
 
-    # ── Map columns (if requested) ───────────────────────────────
-    if mapping:
-        raw_df = _apply_column_map(raw_df, mapping)
+        duplicate_targets = _find_duplicate_target_sources(raw_df.columns, mapping)
+        if duplicate_targets:
+            message = _format_duplicate_columns_message(
+                duplicate_targets, mapping_applied=bool(mapping)
+            )
+            qc_path, manifest_path = _write_failure_artifacts(
+                out_dir, input_file, created_at, message=message, rows_in=len(raw_df)
+            )
+            _err(message)
+            console.print(f"  QC report -> {qc_path}")
+            console.print(f"  Manifest  -> {manifest_path}")
+            raise typer.Exit(code=2)
 
-    duplicate_columns = _find_duplicate_columns(raw_df.columns)
-    if duplicate_columns:
-        message = (
-            "Duplicate columns after normalization/mapping: "
-            f"{', '.join(duplicate_columns)}"
+        # ── Map columns (if requested) ───────────────────────────
+        if mapping:
+            raw_df = _apply_column_map(raw_df, mapping)
+
+        # ── Clean ────────────────────────────────────────────────
+        echo("[blue]>[/blue] Cleaning …")
+        clean_df, qc = clean_dataframe(
+            raw_df, dayfirst=dayfirst, number_locale=number_locale.value
         )
+
+        # Always write QC
+        qc_path = write_qc_report(out_dir, qc)
+        echo(f"  QC report -> {qc_path}")
+
+        if qc.missing_columns:
+            _err(f"Missing columns: {', '.join(qc.missing_columns)}")
+            console.print(f"  Expected: {', '.join(REQUIRED_COLUMNS)}")
+            console.print("  Hint: use --map target=source to rename headers")
+            _write_manifest(out_dir, input_file, created_at, qc)
+            raise typer.Exit(code=2)
+
+        if not quiet:
+            for w in qc.warnings:
+                console.print(f"  [yellow]![/yellow] {w}")
+            console.print(f"  {qc.rows_out} clean rows retained")
+
+        # ── Compute KPIs ─────────────────────────────────────────
+        echo("[blue]>[/blue] Computing KPIs …")
+        kpis = compute_dashboard_kpis(clean_df)
+        weekly = compute_weekly(clean_df)
+        top_products = compute_top_products(clean_df)
+        top_regions = compute_top_regions(clean_df)
+
+        # ── Write report ─────────────────────────────────────────
+        echo("[blue]>[/blue] Writing Final_Report.xlsx …")
+        report_path = write_report(
+            out_dir, clean_df, kpis, weekly, top_products, top_regions, qc=qc,
+        )
+        echo(f"  Report -> {report_path}")
+
+        # ── Manifest ─────────────────────────────────────────────
+        manifest_path = _write_manifest(out_dir, input_file, created_at, qc)
+        echo(f"  Manifest -> {manifest_path}")
+
+        if not quiet:
+            console.print(Panel(
+                f"[green]Done[/green] — {qc.rows_out} rows -> {report_path}",
+                title="Pipeline Complete", border_style="green",
+            ))
+    except typer.Exit:
+        raise
+    except Exception as exc:
+        message = f"Unexpected internal error: {exc}"
         qc_path, manifest_path = _write_failure_artifacts(
             out_dir, input_file, created_at, message=message, rows_in=len(raw_df)
         )
         _err(message)
-        console.print("  Hint: avoid mapping multiple source columns into one target")
         console.print(f"  QC report -> {qc_path}")
         console.print(f"  Manifest  -> {manifest_path}")
-        raise typer.Exit(code=2)
-
-    # ── Clean ────────────────────────────────────────────────────
-    echo("[blue]>[/blue] Cleaning …")
-    clean_df, qc = clean_dataframe(
-        raw_df, dayfirst=dayfirst, number_locale=number_locale.value
-    )
-
-    # Always write QC
-    qc_path = write_qc_report(out_dir, qc)
-    echo(f"  QC report -> {qc_path}")
-
-    if qc.missing_columns:
-        _err(f"Missing columns: {', '.join(qc.missing_columns)}")
-        console.print(f"  Expected: {', '.join(REQUIRED_COLUMNS)}")
-        console.print("  Hint: use --map target=source to rename headers")
-        _write_manifest(out_dir, input_file, created_at, qc)
-        raise typer.Exit(code=2)
-
-    if not quiet:
-        for w in qc.warnings:
-            console.print(f"  [yellow]![/yellow] {w}")
-        console.print(f"  {qc.rows_out} clean rows retained")
-
-    # ── Compute KPIs ─────────────────────────────────────────────
-    echo("[blue]>[/blue] Computing KPIs …")
-    kpis = compute_dashboard_kpis(clean_df)
-    weekly = compute_weekly(clean_df)
-    top_products = compute_top_products(clean_df)
-    top_regions = compute_top_regions(clean_df)
-
-    # ── Write report ─────────────────────────────────────────────
-    echo("[blue]>[/blue] Writing Final_Report.xlsx …")
-    report_path = write_report(
-        out_dir, clean_df, kpis, weekly, top_products, top_regions, qc=qc,
-    )
-    echo(f"  Report -> {report_path}")
-
-    # ── Manifest ─────────────────────────────────────────────────
-    manifest_path = _write_manifest(out_dir, input_file, created_at, qc)
-    echo(f"  Manifest -> {manifest_path}")
-
-    if not quiet:
-        console.print(Panel(
-            f"[green]Done[/green] — {qc.rows_out} rows -> {report_path}",
-            title="Pipeline Complete", border_style="green",
-        ))
+        raise typer.Exit(code=1)
 
 
 # ── validate command ─────────────────────────────────────────────
@@ -409,76 +446,86 @@ def validate(
 
     echo(f"  {len(raw_df)} rows x {len(raw_df.columns)} columns")
 
-    if raw_df.empty:
-        qc = QCReport(rows_in=0, rows_out=0, warnings=["Input file has 0 rows."])
+    try:
+        if raw_df.empty:
+            qc = QCReport(rows_in=0, rows_out=0, warnings=["Input file has 0 rows."])
+            qc_path = write_qc_report(out_dir, qc)
+            manifest_path = _write_manifest(out_dir, input_file, created_at, qc)
+            _err("Input file has 0 rows.")
+            console.print(f"  QC       -> {qc_path}")
+            console.print(f"  Manifest -> {manifest_path}")
+            raise typer.Exit(code=2)
+
+        duplicate_targets = _find_duplicate_target_sources(raw_df.columns, mapping)
+        if duplicate_targets:
+            message = _format_duplicate_columns_message(
+                duplicate_targets, mapping_applied=bool(mapping)
+            )
+            qc_path, manifest_path = _write_failure_artifacts(
+                out_dir, input_file, created_at, message=message, rows_in=len(raw_df)
+            )
+            _err(message)
+            console.print(f"  QC       -> {qc_path}")
+            console.print(f"  Manifest -> {manifest_path}")
+            raise typer.Exit(code=2)
+
+        if mapping:
+            raw_df = _apply_column_map(raw_df, mapping)
+
+        # ── Clean (dry) ──────────────────────────────────────────
+        _, qc = clean_dataframe(raw_df, dayfirst=dayfirst, number_locale=number_locale.value)
+
+        # Warn if all rows dropped
+        if (qc.rows_out == 0 and qc.rows_in > 0) and (not quiet):
+            console.print(
+                "[yellow]![/yellow] Validation warning: "
+                "cleaned dataset is empty (all rows invalid)."
+            )
+
         qc_path = write_qc_report(out_dir, qc)
         manifest_path = _write_manifest(out_dir, input_file, created_at, qc)
-        _err("Input file has 0 rows.")
-        console.print(f"  QC       -> {qc_path}")
-        console.print(f"  Manifest -> {manifest_path}")
-        raise typer.Exit(code=2)
 
-    if mapping:
-        raw_df = _apply_column_map(raw_df, mapping)
+        # ── Summary table ────────────────────────────────────────
+        if not quiet:
+            tbl = RichTable(title="Validation Summary", show_lines=True)
+            tbl.add_column("Check", style="bold")
+            tbl.add_column("Result")
 
-    duplicate_columns = _find_duplicate_columns(raw_df.columns)
-    if duplicate_columns:
-        message = (
-            "Duplicate columns after normalization/mapping: "
-            f"{', '.join(duplicate_columns)}"
-        )
+            tbl.add_row("Rows in", str(qc.rows_in))
+            tbl.add_row("Rows out", str(qc.rows_out))
+            tbl.add_row("Dropped", str(qc.dropped_rows))
+
+            if qc.missing_columns:
+                tbl.add_row("Missing columns", ", ".join(qc.missing_columns))
+                status = "[red]FAIL[/red]"
+            else:
+                tbl.add_row("Missing columns", "[green]none[/green]")
+                status = "[green]PASS[/green]"
+
+            for w in qc.warnings:
+                tbl.add_row("Warning", f"[yellow]{w}[/yellow]")
+
+            tbl.add_row("Status", status)
+            console.print(tbl)
+            console.print(f"  QC       -> {qc_path}")
+            console.print(f"  Manifest -> {manifest_path}")
+        else:
+            console.print(f"  QC       -> {qc_path}")
+            console.print(f"  Manifest -> {manifest_path}")
+
+        if qc.missing_columns:
+            _err(f"Missing columns: {', '.join(qc.missing_columns)}")
+            console.print(f"  Expected: {', '.join(REQUIRED_COLUMNS)}")
+            console.print("  Hint: use --map target=source to rename headers")
+            raise typer.Exit(code=2)
+    except typer.Exit:
+        raise
+    except Exception as exc:
+        message = f"Unexpected internal error: {exc}"
         qc_path, manifest_path = _write_failure_artifacts(
             out_dir, input_file, created_at, message=message, rows_in=len(raw_df)
         )
         _err(message)
-        console.print("  Hint: avoid mapping multiple source columns into one target")
         console.print(f"  QC       -> {qc_path}")
         console.print(f"  Manifest -> {manifest_path}")
-        raise typer.Exit(code=2)
-
-    # ── Clean (dry) ──────────────────────────────────────────────
-    _, qc = clean_dataframe(raw_df, dayfirst=dayfirst, number_locale=number_locale.value)
-
-    # Warn if all rows dropped
-    if (qc.rows_out == 0 and qc.rows_in > 0) and (not quiet):
-        console.print(
-            "[yellow]![/yellow] Validation warning: "
-            "cleaned dataset is empty (all rows invalid)."
-        )
-
-    qc_path = write_qc_report(out_dir, qc)
-    manifest_path = _write_manifest(out_dir, input_file, created_at, qc)
-
-    # ── Summary table ────────────────────────────────────────────
-    if not quiet:
-        tbl = RichTable(title="Validation Summary", show_lines=True)
-        tbl.add_column("Check", style="bold")
-        tbl.add_column("Result")
-
-        tbl.add_row("Rows in", str(qc.rows_in))
-        tbl.add_row("Rows out", str(qc.rows_out))
-        tbl.add_row("Dropped", str(qc.dropped_rows))
-
-        if qc.missing_columns:
-            tbl.add_row("Missing columns", ", ".join(qc.missing_columns))
-            status = "[red]FAIL[/red]"
-        else:
-            tbl.add_row("Missing columns", "[green]none[/green]")
-            status = "[green]PASS[/green]"
-
-        for w in qc.warnings:
-            tbl.add_row("Warning", f"[yellow]{w}[/yellow]")
-
-        tbl.add_row("Status", status)
-        console.print(tbl)
-        console.print(f"  QC       -> {qc_path}")
-        console.print(f"  Manifest -> {manifest_path}")
-    else:
-        console.print(f"  QC       -> {qc_path}")
-        console.print(f"  Manifest -> {manifest_path}")
-
-    if qc.missing_columns:
-        _err(f"Missing columns: {', '.join(qc.missing_columns)}")
-        console.print(f"  Expected: {', '.join(REQUIRED_COLUMNS)}")
-        console.print("  Hint: use --map target=source to rename headers")
-        raise typer.Exit(code=2)
+        raise typer.Exit(code=1)

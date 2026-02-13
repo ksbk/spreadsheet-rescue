@@ -280,6 +280,23 @@ def test_excel_value_escapes_formula_like_strings() -> None:
     assert escaped == "'=SUM(A1:A2)"
 
 
+def test_write_report_escapes_formula_like_product_values(tmp_path: Path) -> None:
+    clean_df, kpis, weekly, top_products, top_regions, qc = _make_nonempty_inputs()
+    clean_df.loc[0, "product"] = '=HYPERLINK("https://example.com","Click")'
+
+    report_path = write_report(tmp_path, clean_df, kpis, weekly, top_products, top_regions, qc=qc)
+    wb = load_workbook(report_path)
+    ws = wb["Clean_Data"]
+
+    headers = [ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)]
+    product_col = headers.index("product") + 1
+    product_cell = ws.cell(row=2, column=product_col)
+
+    assert isinstance(product_cell.value, str)
+    assert product_cell.value.startswith("'=HYPERLINK(")
+    assert product_cell.data_type == "s"
+
+
 def test_excel_value_preserves_apostrophe_prefixed_strings() -> None:
     value = "'=SUM(A1:A2)"
     assert report_mod._excel_value(value) == value

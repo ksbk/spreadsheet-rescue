@@ -44,8 +44,8 @@ coverage: ## Run pytest with coverage report
 
 # ── Run ──────────────────────────────────────────────────────────
 
-demo: install ## Run pipeline on example data
-	$(SRESCUE) run -i examples/raw_sales.csv --out-dir $(DEMO_DIR)
+demo: install ## Run pipeline on demo dataset
+	./scripts/demo.sh
 	@echo ""
 	@echo "Output:"
 	@ls -lh $(DEMO_DIR)/

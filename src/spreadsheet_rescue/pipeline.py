@@ -51,7 +51,9 @@ def _count_ambiguous_day_month_dates(s: pd.Series) -> int:
     return int(mask.fillna(False).sum())
 
 
-def _normalize_numeric_token(token: str, *, locale: NumberLocale) -> str:
+def _normalize_numeric_token_with_flags(
+    token: str, *, locale: NumberLocale
+) -> tuple[str, bool, bool]:
     token = token.strip()
     token = re.sub(r"^\((.*)\)$", r"-\1", token)
     token = token.replace("—", "")
@@ -63,79 +65,119 @@ def _normalize_numeric_token(token: str, *, locale: NumberLocale) -> str:
     token = token.replace("_", "")
 
     if token in {"", "-", "+"}:
-        return ""
+        return "", False, False
     if token.startswith("+"):
         token = token[1:]
 
     has_comma = "," in token
     has_dot = "." in token
+    saw_eu_decimal_comma = False
+    saw_ambiguous_separator = False
 
     if locale == "us":
         if has_comma and has_dot:
-            return token.replace(",", "")
+            return token.replace(",", ""), saw_eu_decimal_comma, saw_ambiguous_separator
         if has_comma and _THOUSANDS_COMMA_RE.fullmatch(token):
-            return token.replace(",", "")
-        return token
+            return token.replace(",", ""), saw_eu_decimal_comma, saw_ambiguous_separator
+        return token, saw_eu_decimal_comma, saw_ambiguous_separator
 
     if locale == "eu":
         if has_comma and has_dot:
             token = token.replace(".", "")
             token = token.replace(",", ".")
-            return token
+            saw_eu_decimal_comma = True
+            return token, saw_eu_decimal_comma, saw_ambiguous_separator
         if has_comma:
             if token.count(",") == 1:
                 whole, frac = token.split(",", 1)
                 if len(frac) in (1, 2, 3):
-                    return f"{whole}.{frac}"
-            return token
+                    saw_eu_decimal_comma = True
+                    return f"{whole}.{frac}", saw_eu_decimal_comma, saw_ambiguous_separator
+            return token, saw_eu_decimal_comma, saw_ambiguous_separator
         if has_dot and _THOUSANDS_DOT_RE.fullmatch(token):
-            return token.replace(".", "")
-        return token
+            return token.replace(".", ""), saw_eu_decimal_comma, saw_ambiguous_separator
+        return token, saw_eu_decimal_comma, saw_ambiguous_separator
 
     if has_comma and has_dot:
         if token.rfind(",") > token.rfind("."):
             token = token.replace(".", "")
             token = token.replace(",", ".")
+            saw_eu_decimal_comma = True
         else:
             token = token.replace(",", "")
-        return token
+        return token, saw_eu_decimal_comma, saw_ambiguous_separator
 
     if has_comma:
         if _THOUSANDS_COMMA_RE.fullmatch(token):
-            return token.replace(",", "")
+            if token.count(",") == 1:
+                saw_ambiguous_separator = True
+            return token.replace(",", ""), saw_eu_decimal_comma, saw_ambiguous_separator
         if token.count(",") == 1:
             whole, frac = token.split(",", 1)
             if len(frac) in (1, 2):
-                return f"{whole}.{frac}"
+                saw_eu_decimal_comma = True
+                return f"{whole}.{frac}", saw_eu_decimal_comma, saw_ambiguous_separator
             if len(frac) == 3:
-                return f"{whole}{frac}"
+                saw_ambiguous_separator = True
+                return f"{whole}{frac}", saw_eu_decimal_comma, saw_ambiguous_separator
         parts = token.split(",")
         if len(parts) > 1 and len(parts[-1]) in (1, 2) and all(len(p) == 3 for p in parts[1:-1]):
-            return f"{''.join(parts[:-1])}.{parts[-1]}"
-        return token
+            saw_eu_decimal_comma = True
+            normalized = f"{''.join(parts[:-1])}.{parts[-1]}"
+            return normalized, saw_eu_decimal_comma, saw_ambiguous_separator
+        return token, saw_eu_decimal_comma, saw_ambiguous_separator
 
     if has_dot and _THOUSANDS_DOT_RE.fullmatch(token):
-        return token.replace(".", "")
+        if token.count(".") == 1:
+            saw_ambiguous_separator = True
+        return token.replace(".", ""), saw_eu_decimal_comma, saw_ambiguous_separator
 
-    return token
+    return token, saw_eu_decimal_comma, saw_ambiguous_separator
+
+
+def _normalize_numeric_token(token: str, *, locale: NumberLocale) -> str:
+    normalized, _eu_decimal, _ambiguous = _normalize_numeric_token_with_flags(
+        token, locale=locale
+    )
+    return normalized
+
+
+def _coerce_numeric_value_with_flags(
+    value: object, *, locale: NumberLocale
+) -> tuple[str | None, bool, bool]:
+    try:
+        if pd.isna(cast(Any, value)):
+            return None, False, False
+    except Exception:
+        pass
+    return _normalize_numeric_token_with_flags(str(value), locale=locale)
 
 
 def _coerce_numeric_value(value: object, *, locale: NumberLocale) -> str | None:
-    try:
-        if pd.isna(cast(Any, value)):
-            return None
-    except Exception:
-        pass
-    return _normalize_numeric_token(str(value), locale=locale)
+    normalized, _eu_decimal, _ambiguous = _coerce_numeric_value_with_flags(
+        value, locale=locale
+    )
+    return normalized
 
 
-def _coerce_numeric(s: pd.Series, *, locale: NumberLocale) -> pd.Series:
+def _coerce_numeric(s: pd.Series, *, locale: NumberLocale) -> tuple[pd.Series, int, int]:
+    eu_decimal_count = 0
+    ambiguous_count = 0
+
     if not pd.api.types.is_numeric_dtype(s):
-        cleaned = s.astype("string").map(
-            lambda val: _coerce_numeric_value(val, locale=locale)
-        )
-        return pd.to_numeric(cleaned, errors="coerce")
-    return pd.to_numeric(s, errors="coerce")
+        cleaned_values: list[str | None] = []
+        for val in s.astype("string"):
+            normalized, saw_eu_decimal, saw_ambiguous = _coerce_numeric_value_with_flags(
+                val, locale=locale
+            )
+            if saw_eu_decimal:
+                eu_decimal_count += 1
+            if saw_ambiguous:
+                ambiguous_count += 1
+            cleaned_values.append(normalized)
+        cleaned = pd.Series(cleaned_values, index=s.index, dtype="string")
+        return pd.to_numeric(cleaned, errors="coerce"), eu_decimal_count, ambiguous_count
+    return pd.to_numeric(s, errors="coerce"), eu_decimal_count, ambiguous_count
 
 
 # ── Main cleaning function ──────────────────────────────────────
@@ -198,7 +240,22 @@ def clean_dataframe(
             qc.warnings.append(
                 f"Found {pct_count} values with '%' in {col}; treated as plain numbers"
             )
-        df[col] = _coerce_numeric(df[col], locale=number_locale)
+        parsed_col, eu_decimal_count, ambiguous_count = _coerce_numeric(
+            df[col], locale=number_locale
+        )
+        df[col] = parsed_col
+        if eu_decimal_count:
+            suffix = "" if eu_decimal_count == 1 else "s"
+            qc.warnings.append(
+                f"Detected EU decimal commas in {col}: {eu_decimal_count} value{suffix}"
+            )
+        if ambiguous_count:
+            suffix = "" if ambiguous_count == 1 else "s"
+            qc.warnings.append(
+                "Detected "
+                f"{ambiguous_count} ambiguous numeric value{suffix} in {col} "
+                "(example: 1,234); interpreted as thousands separators"
+            )
 
     # 4. Trim text fields
     for col in ("product", "region"):

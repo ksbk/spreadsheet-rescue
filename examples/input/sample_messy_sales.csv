@@ -1,0 +1,13 @@
+date,product,region,revenue,cost,units
+01/02/2024,Widget A,North,"1.200,50","200,25","2,0"
+2024-01-03,Gadget B,South,"1,234.56",700.10,3
+02/01/2024,Widget C,West,"980,40","300,10","1,5"
+2024/01/07,Widget A,East,1200,800,4
+2024-01-08,"=HYPERLINK(""https://example.com"",""Click"")",North,450,200,2
+2024-01-09,Widget D,South,"$2,400.00","$1,600.00",6
+2024-01-10,Widget E,West,1.250,600,2
+not-a-date,Widget F,North,100,80,1
+2024-01-12,Widget G,East,—,200,1
+2024-01-13,Widget H,South,1300.75,700.50,5
+2024-01-14,Widget I,West,"1,234",2
+2024-01-15,Widget J,North,900,450,2

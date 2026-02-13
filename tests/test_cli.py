@@ -609,7 +609,8 @@ def test_validate_duplicate_columns_after_mapping_fails_with_artifacts(tmp_path:
     assert result.exit_code == 2
     qc = json.loads((out_dir / "qc_report.json").read_text())
     assert qc["rows_out"] == 0
-    assert any("Duplicate columns after normalization/mapping" in w for w in qc["warnings"])
+    assert any("Mapping produced duplicate columns" in w for w in qc["warnings"])
+    assert any("source: revenue + Sales" in w for w in qc["warnings"])
     assert (out_dir / "run_manifest.json").exists()
 
 
@@ -638,7 +639,8 @@ def test_run_duplicate_columns_after_mapping_fails_with_artifacts(tmp_path: Path
     assert result.exit_code == 2
     qc = json.loads((out_dir / "qc_report.json").read_text())
     assert qc["rows_out"] == 0
-    assert any("Duplicate columns after normalization/mapping" in w for w in qc["warnings"])
+    assert any("Mapping produced duplicate columns" in w for w in qc["warnings"])
+    assert any("source: revenue + Sales" in w for w in qc["warnings"])
     assert (out_dir / "run_manifest.json").exists()
     assert not (out_dir / "Final_Report.xlsx").exists()
 
@@ -902,6 +904,32 @@ def test_run_load_table_value_error_exits(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert (out_dir / "run_manifest.json").exists()
 
 
+def test_run_unexpected_internal_error_exits_with_code_1_and_artifacts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    input_path = tmp_path / "input.csv"
+    input_path.write_text(
+        "date,product,region,revenue,cost,units\n2024-01-01,Widget,US,100,40,10\n"
+    )
+    out_dir = tmp_path / "run_internal_error"
+
+    def _raise_runtime_error(*_args: object, **_kwargs: object) -> tuple[pd.DataFrame, QCReport]:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(cli_mod, "clean_dataframe", _raise_runtime_error)
+
+    result = runner.invoke(
+        app,
+        ["run", "--input", str(input_path), "--out-dir", str(out_dir)],
+    )
+
+    assert result.exit_code == 1
+    assert "Unexpected internal error: boom" in result.stdout
+    assert (out_dir / "qc_report.json").exists()
+    assert (out_dir / "run_manifest.json").exists()
+    assert not (out_dir / "Final_Report.xlsx").exists()
+
+
 def test_validate_nonquiet_with_profile_shows_profile_line(tmp_path: Path) -> None:
     """Test validate in non-quiet mode prints the profile path when provided."""
     profile_path = tmp_path / "profile.txt"
@@ -952,5 +980,31 @@ def test_validate_load_table_value_error_exits(
 
     assert result.exit_code == 2
     assert "bad file format" in result.stdout
+    assert (out_dir / "qc_report.json").exists()
+    assert (out_dir / "run_manifest.json").exists()
+
+
+def test_validate_unexpected_internal_error_exits_with_code_1_and_artifacts(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "input.csv"
+    input_path.write_text(
+        "date,product,region,revenue,cost,units\n2024-01-01,Widget,US,100,40,10\n"
+    )
+    out_dir = tmp_path / "validate_internal_error"
+
+    def _raise_runtime_error(*_args: object, **_kwargs: object) -> tuple[pd.DataFrame, QCReport]:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(cli_mod, "clean_dataframe", _raise_runtime_error)
+
+    result = runner.invoke(
+        app,
+        ["validate", "--input", str(input_path), "--out-dir", str(out_dir)],
+    )
+
+    assert result.exit_code == 1
+    assert "Unexpected internal error: boom" in result.stdout
     assert (out_dir / "qc_report.json").exists()
     assert (out_dir / "run_manifest.json").exists()

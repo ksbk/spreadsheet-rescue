@@ -227,6 +227,29 @@ def test_european_numeric_formats_are_parsed_without_corruption() -> None:
     assert qc.rows_out == 1
 
 
+def test_eu_decimal_comma_warnings_include_column_counters() -> None:
+    df = pd.DataFrame(
+        {
+            "date": ["2024-01-01"],
+            "product": ["Widget"],
+            "region": ["EU"],
+            "revenue": ["1.200,50"],
+            "cost": ["200,25"],
+            "units": ["2,5"],
+        }
+    )
+
+    clean_df, qc = clean_dataframe(df)
+
+    assert len(clean_df) == 1
+    assert float(clean_df.iloc[0]["revenue"]) == 1200.5
+    assert float(clean_df.iloc[0]["cost"]) == 200.25
+    assert float(clean_df.iloc[0]["units"]) == 2.5
+    assert any("Detected EU decimal commas in revenue: 1 value" in w for w in qc.warnings)
+    assert any("Detected EU decimal commas in cost: 1 value" in w for w in qc.warnings)
+    assert any("Detected EU decimal commas in units: 1 value" in w for w in qc.warnings)
+
+
 def test_ambiguous_day_month_dates_emit_warning() -> None:
     df = pd.DataFrame(
         {
@@ -305,6 +328,44 @@ def test_explicit_number_locale_modes_parse_differently() -> None:
     eu_row = clean_eu[clean_eu["product"] == "EU"].iloc[0]
     assert float(us_row["revenue"]) == 1200.5
     assert float(eu_row["revenue"]) == 1200.5
+
+
+def test_auto_locale_parses_us_grouped_decimal_value() -> None:
+    df = pd.DataFrame(
+        {
+            "date": ["2024-01-01"],
+            "product": ["US"],
+            "region": ["US"],
+            "revenue": ["1,234.56"],
+            "cost": ["234.56"],
+            "units": ["1"],
+        }
+    )
+
+    clean_df, _qc = clean_dataframe(df, number_locale="auto")
+
+    assert len(clean_df) == 1
+    assert float(clean_df.iloc[0]["revenue"]) == 1234.56
+
+
+def test_auto_locale_ambiguous_single_comma_emits_warning_and_uses_default_parse() -> None:
+    df = pd.DataFrame(
+        {
+            "date": ["2024-01-01"],
+            "product": ["Ambiguous"],
+            "region": ["US"],
+            "revenue": ["1,234"],
+            "cost": ["100"],
+            "units": ["1"],
+        }
+    )
+
+    clean_df, qc = clean_dataframe(df, number_locale="auto")
+
+    assert len(clean_df) == 1
+    assert float(clean_df.iloc[0]["revenue"]) == 1234.0
+    assert any("ambiguous numeric value" in warning for warning in qc.warnings)
+    assert any("interpreted as thousands separators" in warning for warning in qc.warnings)
 
 
 def test_invalid_number_locale_raises_value_error() -> None:
