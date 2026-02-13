@@ -1,0 +1,13 @@
+# Demo commands — run from project root
+# ─────────────────────────────────────
+
+# Step 1: Validate the file (preflight check)
+srescue validate -i demo/before.csv --out-dir demo/output
+
+# Step 2: Run the full pipeline
+srescue run -i demo/before.csv --out-dir demo/output
+
+# What you get:
+#   demo/output/Final_Report.xlsx   — Dashboard + Weekly + Top Products/Regions + Clean Data
+#   demo/output/qc_report.json      — rows in/out, dropped count, warnings
+#   demo/output/run_manifest.json   — version, input SHA-256, timestamps

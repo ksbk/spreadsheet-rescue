@@ -5,34 +5,44 @@
 > **Local-first. No data leaves your machine.**
 > Built for freelancers, analysts, and SMEs who waste hours cleaning spreadsheets every week.
 
+### 60-second demo
+
+```bash
+pip install -e .
+srescue validate -i demo/before.csv --out-dir demo/output   # preflight check
+srescue run      -i demo/before.csv --out-dir demo/output   # full pipeline
+```
+
+<!-- Add a screenshot of the Dashboard sheet here: -->
+<!-- ![Dashboard](demo/after_dashboard.png) -->
+
+**What comes out:**
+
+```
+demo/output/
+  Final_Report.xlsx    ← Dashboard + Weekly + Top Products/Regions + Clean Data
+  qc_report.json       ← rows in/out, dropped count, warnings
+  run_manifest.json    ← version, input SHA-256, timestamps
+```
+
+> **Need your spreadsheets cleaned?** [Hire me](#hire--contact) — I deliver a repeatable tool + QC report + audit trail.
+
 ---
 
 ## Contents
 
-- [📊 spreadsheet-rescue — Clean Messy Spreadsheets into Client-Ready Reports](#-spreadsheet-rescue--clean-messy-spreadsheets-into-client-ready-reports)
-  - [Contents](#contents)
-  - [The Problem](#the-problem)
-  - [The Solution](#the-solution)
-  - [What You Get](#what-you-get)
-  - [Quick Start](#quick-start)
-    - [Install (editable)](#install-editable)
-    - [Run the example](#run-the-example)
-  - [How It Works](#how-it-works)
-  - [Output Contract](#output-contract)
-  - [QC \& Reliability](#qc--reliability)
-    - [v0.1 QC rules](#v01-qc-rules)
-    - [Exit codes](#exit-codes)
-  - [Configuration](#configuration)
-    - [v0.1 (opinionated)](#v01-opinionated)
-    - [v0.2 (planned)](#v02-planned)
-  - [Roadmap](#roadmap)
-    - [v0.1 — MVP (now)](#v01--mvp-now)
-    - [v0.2 — High-leverage upgrades](#v02--high-leverage-upgrades)
-    - [v0.3 — "Client-ready packs"](#v03--client-ready-packs)
-  - [Services](#services)
-  - [Changelog](#changelog)
-    - [2026-02-13 — v0.1.0](#2026-02-13--v010)
-  - [Hire / Contact](#hire--contact)
+* [The Problem](#the-problem)
+* [The Solution](#the-solution)
+* [What You Get](#what-you-get)
+* [Quick Start](#quick-start)
+* [How It Works](#how-it-works)
+* [Output Contract](#output-contract)
+* [QC & Reliability](#qc--reliability)
+* [Configuration](#configuration)
+* [Roadmap](#roadmap)
+* [Services](#services)
+* [Changelog](#changelog)
+* [Hire / Contact](#hire--contact)
 
 ---
 
@@ -151,9 +161,9 @@ This contract is intentionally stable so you can build workflows (or a future we
 
 ## Configuration
 
-### v0.1 (opinionated)
+### v0.1 defaults
 
-The example profile expects these columns:
+Required columns (case-insensitive):
 
 * `date, product, region, revenue, cost, units`
 
@@ -162,9 +172,30 @@ Derived fields:
 * `profit = revenue - cost`
 * `week = start date of week`
 
+### Column mapping (`--map`)
+
+If your file uses different column names, remap them:
+
+```bash
+srescue run -i data.csv --out-dir output \
+  --map revenue=Sales \
+  --map date=OrderDate
+```
+
+Format: `--map target=source` (repeatable).
+
+### Validate-only mode
+
+Preflight check — writes QC + manifest without producing the Excel report:
+
+```bash
+srescue validate -i data.csv --out-dir output
+```
+
+Exit `0` = OK, exit `2` = schema failure.
+
 ### v0.2 (planned)
 
-* Column mapping (e.g. `--map revenue=Sales amount=Total`)
 * Batch mode for folders (`--input-dir`)
 * Rules YAML for reuse (filters, dedupe, categories)
 
@@ -172,20 +203,24 @@ Derived fields:
 
 ## Roadmap
 
-### v0.1 — MVP (now)
+### v0.1 — MVP (current)
 
 * [x] CLI `srescue run`
+* [x] CLI `srescue validate` (preflight)
 * [x] CSV/XLSX input
 * [x] Cleaning + derived fields
-* [x] Excel report output
+* [x] Professional Excel report (number formats, freeze panes, Excel Tables)
+* [x] Dashboard with QC notes block
 * [x] QC report + run manifest
-* [ ] Minimal styling polish (column formats, freeze header row)
+* [x] `--map` column remapping
+* [x] Exit-code contract (0 success, 2 schema failure)
+* [x] Demo pack (`demo/`)
 * [ ] Add 2–3 more example datasets
 
 ### v0.2 — High-leverage upgrades
 
 * [ ] Multi-file batch processing (`--input-dir`)
-* [ ] Column mapping (flags + YAML)
+* [ ] Rules YAML profiles
 * [ ] PDF executive summary export
 * [ ] Stronger QC checks (outliers, duplicate rate, negative totals)
 
@@ -221,7 +256,14 @@ If you want this done for your specific spreadsheets, I offer:
 
 ### 2026-02-13 — v0.1.0
 
-* Initial release: CLI run + report workbook + QC + manifest
+* `srescue run` — full cleaning + reporting pipeline
+* `srescue validate` — preflight schema check
+* `--map` flag for column remapping
+* Professional Excel formatting (number formats, freeze panes, Excel Tables, Dashboard QC notes)
+* QC report + run manifest with SHA-256 audit trail
+* Exit-code contract: `0` success, `2` schema failure
+* Demo pack in `demo/`
+* 7 smoke tests passing
 
 ---
 
