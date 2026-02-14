@@ -33,15 +33,15 @@ This dataset includes ambiguous dates, mixed numeric locales, non-standard heade
 
 ### Dashboard
 
-![Dashboard proof](../../demo/dashboard.png)
+![Dashboard proof](https://raw.githubusercontent.com/ksbk/spreadsheet-rescue/main/demo/dashboard.png)
 
 ### Clean_Data preview
 
-![Clean_Data proof](../../demo/clean_data.png)
+![Clean_Data proof](https://raw.githubusercontent.com/ksbk/spreadsheet-rescue/main/demo/clean_data.png)
 
 ### Weekly preview
 
-![Weekly proof](../../demo/weekly.png)
+![Weekly proof](https://raw.githubusercontent.com/ksbk/spreadsheet-rescue/main/demo/weekly.png)
 
 ## 5) What to show in a live demo
 

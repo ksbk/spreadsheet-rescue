@@ -21,6 +21,20 @@ Outputs:
 - `demo/output/qc.json`
 - `demo/output/manifest.json`
 - `demo/dashboard.png`
+- `demo/clean_data.png`
+- `demo/weekly.png`
+
+## Quick Try (One-Link Trial)
+
+```bash
+pipx install spreadsheet-rescue
+make customer-pack
+open demo/output/Final_Report.xlsx
+```
+
+Notes:
+- `make customer-pack` generates `dist/customer-demo-pack.zip` for email-ready buyer evaluation.
+- `open` is macOS; on Linux/Windows open the workbook manually from `demo/output/`.
 
 ## 90-second walkthrough
 

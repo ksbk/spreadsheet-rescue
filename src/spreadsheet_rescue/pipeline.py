@@ -189,7 +189,7 @@ def clean_dataframe(
     dayfirst: bool = False,
     number_locale: NumberLocale = "auto",
 ) -> tuple[pd.DataFrame, QCReport]:
-    """Clean *df* according to the v0.1.2 data contract.
+    """Clean *df* according to the v0.1.4 data contract.
 
     Returns ``(cleaned_df, qc_report)``.  If required columns are missing
     the returned DataFrame is empty but the QC report is populated.

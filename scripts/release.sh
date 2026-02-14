@@ -1,37 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+TARGET_VERSION="0.1.4"
+TARGET_TAG="v${TARGET_VERSION}"
+DRY_RUN=false
+
 usage() {
   cat <<'EOF'
 Usage:
-  ./scripts/release.sh <tag> [--dry-run]
+  ./scripts/release.sh [--dry-run]
 
-Examples:
-  ./scripts/release.sh v0.1.2
-  ./scripts/release.sh v0.1.2-rc1 --dry-run
+This script runs full release checks, bumps version to 0.1.4,
+and creates git tag v0.1.4.
 EOF
 }
 
-if [[ $# -lt 1 ]]; then
+if [[ $# -gt 1 ]]; then
   usage
   exit 1
 fi
 
-TAG="$1"
-DRY_RUN=false
-
-if [[ $# -ge 2 ]]; then
-  if [[ "$2" == "--dry-run" ]]; then
+if [[ $# -eq 1 ]]; then
+  if [[ "$1" == "--dry-run" ]]; then
     DRY_RUN=true
   else
     usage
     exit 1
   fi
-fi
-
-if [[ "$TAG" != v* ]]; then
-  echo "Error: tag must start with 'v' (for example: v0.1.2)." >&2
-  exit 1
 fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -47,53 +42,78 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   exit 1
 fi
 
-if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
-  echo "Error: local tag '$TAG' already exists." >&2
+if git rev-parse -q --verify "refs/tags/${TARGET_TAG}" >/dev/null; then
+  echo "Error: local tag '${TARGET_TAG}' already exists." >&2
   exit 1
 fi
 
-TEMPLATE_FILE="docs/releases/TEMPLATE.md"
-NOTES_FILE="docs/releases/${TAG}.md"
-RELEASE_DATE="$(date +%Y-%m-%d)"
-
-if [[ ! -f "$TEMPLATE_FILE" ]]; then
-  echo "Error: template file missing: $TEMPLATE_FILE" >&2
+if git ls-remote --tags --refs origin "refs/tags/${TARGET_TAG}" | grep -q "refs/tags/${TARGET_TAG}$"; then
+  echo "Error: remote tag '${TARGET_TAG}' already exists on origin." >&2
   exit 1
 fi
 
-if [[ -f "$NOTES_FILE" ]]; then
-  echo "Error: release notes already exist: $NOTES_FILE" >&2
+NOTES_FILE="docs/releases/${TARGET_TAG}.md"
+if [[ ! -f "$NOTES_FILE" ]]; then
+  echo "Error: missing release notes file: ${NOTES_FILE}" >&2
   exit 1
 fi
 
 if [[ "$DRY_RUN" == "true" ]]; then
-  echo "[dry-run] Would create: $NOTES_FILE"
-  echo "[dry-run] Would commit: release: $TAG"
-  echo "[dry-run] Would tag: $TAG"
-  echo "[dry-run] Would push branch and tag to origin"
+  echo "[dry-run] Would run: uv run ruff check src tests scripts"
+  echo "[dry-run] Would run: uv run mypy src/spreadsheet_rescue"
+  echo "[dry-run] Would run: uv run pytest -q"
+  echo "[dry-run] Would run: uv run ./scripts/smoke_install.sh"
+  echo "[dry-run] Would run: make customer-pack"
+  echo "[dry-run] Would bump version to ${TARGET_VERSION}"
+  echo "[dry-run] Would commit: release: ${TARGET_TAG}"
+  echo "[dry-run] Would create tag: ${TARGET_TAG}"
   exit 0
 fi
 
-if git ls-remote --tags --refs origin "refs/tags/$TAG" | grep -q "refs/tags/$TAG$"; then
-  echo "Error: remote tag '$TAG' already exists on origin." >&2
-  exit 1
-fi
+echo "[release] Running quality checks"
+uv run ruff check src tests scripts
+uv run mypy src/spreadsheet_rescue
+uv run pytest -q
 
-awk -v tag="$TAG" -v release_date="$RELEASE_DATE" '
-  {
-    gsub(/\{\{TAG\}\}/, tag)
-    gsub(/\{\{DATE\}\}/, release_date)
-    print
-  }
-' "$TEMPLATE_FILE" > "$NOTES_FILE"
+echo "[release] Running smoke install"
+uv run ./scripts/smoke_install.sh
 
-git add "$NOTES_FILE"
-git commit -m "release: $TAG"
-git tag -a "$TAG" -m "$TAG"
-git push
-git push origin "$TAG"
+echo "[release] Building customer pack"
+make customer-pack
 
-echo "Release prepared and pushed:"
-echo "  notes: $NOTES_FILE"
-echo "  tag:   $TAG"
-echo "GitHub release workflow will publish from docs/releases/${TAG}.md."
+echo "[release] Bumping version to ${TARGET_VERSION}"
+python - <<'PY'
+from pathlib import Path
+import re
+
+version = "0.1.4"
+
+pyproject = Path("pyproject.toml")
+text = pyproject.read_text(encoding="utf-8")
+text = re.sub(r'(?m)^version = "[^"]+"$', f'version = "{version}"', text, count=1)
+pyproject.write_text(text, encoding="utf-8")
+
+init_py = Path("src/spreadsheet_rescue/__init__.py")
+text = init_py.read_text(encoding="utf-8")
+text = re.sub(r'(?m)^__version__ = "[^"]+"$', f'__version__ = "{version}"', text, count=1)
+init_py.write_text(text, encoding="utf-8")
+
+cli_test = Path("tests/test_cli.py")
+text = cli_test.read_text(encoding="utf-8")
+text = re.sub(r'assert "v[0-9]+\.[0-9]+\.[0-9]+" in result\.stdout',
+              f'assert "v{version}" in result.stdout',
+              text,
+              count=1)
+cli_test.write_text(text, encoding="utf-8")
+PY
+
+uv lock
+
+git add pyproject.toml src/spreadsheet_rescue/__init__.py tests/test_cli.py uv.lock "$NOTES_FILE"
+git commit -m "release: ${TARGET_TAG}"
+git tag -a "${TARGET_TAG}" -m "${TARGET_TAG}"
+
+echo "Release prepared:"
+echo "  commit: release: ${TARGET_TAG}"
+echo "  tag:    ${TARGET_TAG}"
+echo "Next: git push && git push origin ${TARGET_TAG}"

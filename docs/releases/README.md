@@ -1,6 +1,6 @@
 # Release Notes Convention
 
-When you cut a new tag (`v*`), GitHub Actions publishes a release automatically.
+When you cut a new tag (`v*`), GitHub Actions can publish a release automatically.
 
 ## Rule
 
@@ -10,32 +10,41 @@ Create a release note file at:
 
 Example:
 
-* tag: `v0.1.2`
-* notes file: `docs/releases/v0.1.2.md`
+* tag: `v0.1.4`
+* notes file: `docs/releases/v0.1.4.md`
 
 ## Safe release flow
 
 Use the helper script:
 
 ```bash
-./scripts/release.sh v0.1.2
+./scripts/release.sh
 ```
 
 What it does:
+* runs quality checks (`ruff`, `mypy`, `pytest`)
+* runs `scripts/smoke_install.sh`
+* runs `make customer-pack`
 * validates a clean working tree
 * checks local/remote tag collisions
-* creates `docs/releases/<tag>.md` from `docs/releases/TEMPLATE.md`
-* commits release notes (`release: <tag>`)
-* creates annotated tag
-* pushes branch + tag
+* bumps package version to `0.1.4`
+* commits release changes (`release: v0.1.4`)
+* creates annotated tag `v0.1.4`
 
 Preview only:
 
 ```bash
-./scripts/release.sh v0.1.2 --dry-run
+./scripts/release.sh --dry-run
 ```
 
-## Behavior
+## GitHub release helper
 
-* If `docs/releases/<tag>.md` exists, that file is used as the release body.
-* If the file is missing, GitHub auto-generates release notes as a fallback.
+Use the helper script to create/update the release and upload the customer pack zip:
+
+```bash
+python scripts/gh_release.py --tag v0.1.4 --build-pack
+```
+
+It uses:
+* release notes: `docs/releases/v0.1.4.md`
+* asset: `dist/customer-demo-pack.zip`

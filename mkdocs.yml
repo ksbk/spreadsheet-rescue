@@ -1,0 +1,15 @@
+site_name: spreadsheet-rescue
+site_description: Fix messy CSV/XLSX -> clean Excel report + audit trail
+site_url: https://ksbk.github.io/spreadsheet-rescue/
+repo_url: https://github.com/ksbk/spreadsheet-rescue
+
+theme:
+  name: mkdocs
+
+nav:
+  - Home: index.md
+  - Trust Guarantees: TRUST.md
+  - Use Cases: USE_CASES.md
+  - Onboarding: ONBOARDING.md
+  - Troubleshooting: TROUBLESHOOTING.md
+  - Demo Walkthrough: demo/DEMO.md

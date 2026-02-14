@@ -1124,7 +1124,7 @@ wheels = [
 
 [[package]]
 name = "spreadsheet-rescue"
-version = "0.1.2"
+version = "0.1.4"
 source = { editable = "." }
 dependencies = [
     { name = "openpyxl" },
