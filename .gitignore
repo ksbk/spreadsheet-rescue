@@ -31,6 +31,9 @@ output/
 .vscode/
 .idea/
 
+# Local tooling caches
+.trunk/
+
 # OS
 .DS_Store
 Thumbs.db
