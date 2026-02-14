@@ -7,6 +7,14 @@ import subprocess
 from pathlib import Path
 
 DEFAULT_TAG = "v0.1.4"
+DEMO_ARTIFACTS = [
+    "demo/dashboard.png",
+    "demo/clean_data.png",
+    "demo/weekly.png",
+    "demo/output/Final_Report.xlsx",
+    "demo/output/qc.json",
+    "demo/output/manifest.json",
+]
 
 
 def _run(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -15,6 +23,34 @@ def _run(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
+
+
+def _status_paths(repo_root: Path, paths: list[str]) -> set[str]:
+    result = subprocess.run(
+        ["git", "status", "--porcelain", "--", *paths],
+        cwd=repo_root,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    dirty_paths: set[str] = set()
+    for line in result.stdout.splitlines():
+        entry = line[3:]
+        if " -> " in entry:
+            entry = entry.split(" -> ", 1)[1]
+        dirty_paths.add(entry)
+    return dirty_paths
+
+
+def _restore_paths(repo_root: Path, paths: list[str]) -> None:
+    if not paths:
+        return
+    subprocess.run(
+        ["git", "restore", "--worktree", "--", *paths],
+        cwd=repo_root,
+        check=True,
+        text=True,
+    )
 
 
 def main() -> None:
@@ -81,7 +117,14 @@ def main() -> None:
         raise SystemExit(f"Error: release notes file not found: {notes}")
 
     if args.build_pack:
-        _run(["make", "customer-pack"], cwd=repo_root)
+        preexisting_demo_dirty = _status_paths(repo_root, DEMO_ARTIFACTS)
+        restore_candidates = [
+            path for path in DEMO_ARTIFACTS if path not in preexisting_demo_dirty
+        ]
+        try:
+            _run(["make", "customer-pack"], cwd=repo_root)
+        finally:
+            _restore_paths(repo_root, restore_candidates)
 
     if not asset.exists():
         raise SystemExit(
