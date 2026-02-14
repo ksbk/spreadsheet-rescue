@@ -22,7 +22,6 @@ htmlcov/
 
 # Output
 output/
-demo/output/
 *.xlsx
 
 # IDE

@@ -56,7 +56,7 @@ version: ## Print tool version
 # ── Cleanup ──────────────────────────────────────────────────────
 
 clean: ## Remove build artifacts, caches, and output
-	rm -rf output/ demo/output/
+	rm -rf output/
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name .mypy_cache -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true

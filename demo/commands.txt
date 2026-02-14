@@ -1,8 +1,0 @@
-# Preflight (no Excel)
-srescue validate -i demo/before.csv --out-dir demo/output
-
-# Full run
-srescue run -i demo/before.csv --out-dir demo/output
-
-# Column mapping example
-srescue run -i demo/before.csv --out-dir demo/output --map revenue=Sales --map date=OrderDate

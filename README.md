@@ -279,7 +279,7 @@ uv run pytest -q
 * [x] QC report + run manifest
 * [x] `--map` column remapping
 * [x] Exit-code contract (0 success, 2 schema failure)
-* [x] Demo pack (`demo/`)
+* [x] Demo pack (`docs/demo/` + `examples/input/` + `scripts/demo.sh`)
 * [ ] Add 2–3 more example datasets
 
 ### v0.2 — High-leverage upgrades
@@ -339,7 +339,7 @@ If you want this done for your specific spreadsheets, I offer:
 * Professional Excel formatting (number formats, freeze panes, Excel Tables, Dashboard QC notes)
 * QC report + run manifest with SHA-256 audit trail
 * Exit-code contract: `0` success, `2` schema failure
-* Demo pack in `demo/`
+* Demo pack introduced (now standardized as `docs/demo/` + `examples/input/` + `scripts/demo.sh`)
 * 7 smoke tests passing
 
 ---
