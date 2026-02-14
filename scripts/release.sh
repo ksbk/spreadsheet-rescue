@@ -81,6 +81,15 @@ uv run ./scripts/smoke_install.sh
 echo "[release] Building customer pack"
 make customer-pack
 
+echo "[release] Restoring tracked demo artifacts changed by smoke/demo steps"
+git checkout -- \
+  demo/dashboard.png \
+  demo/clean_data.png \
+  demo/weekly.png \
+  demo/output/Final_Report.xlsx \
+  demo/output/qc.json \
+  demo/output/manifest.json
+
 echo "[release] Bumping version to ${TARGET_VERSION}"
 python - <<'PY'
 from pathlib import Path
@@ -110,7 +119,13 @@ PY
 uv lock
 
 git add pyproject.toml src/spreadsheet_rescue/__init__.py tests/test_cli.py uv.lock "$NOTES_FILE"
-git commit -m "release: ${TARGET_TAG}"
+
+if ! git diff --cached --quiet; then
+  git commit -m "release: ${TARGET_TAG}"
+else
+  echo "[release] Version files already at ${TARGET_VERSION}; tagging current HEAD."
+fi
+
 git tag -a "${TARGET_TAG}" -m "${TARGET_TAG}"
 
 echo "Release prepared:"
