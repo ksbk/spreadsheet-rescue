@@ -15,6 +15,10 @@ In minutes, you get:
 * a polished Excel dashboard/report pack
 * QC + manifest artifacts for trust and repeatability
 
+## Live demo
+
+[Watch the 60-90 second walkthrough (replace URL)](https://youtu.be/REPLACE_WITH_YOUR_DEMO_ID)
+
 ## Deliverables
 
 Every run delivers:

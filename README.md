@@ -26,6 +26,10 @@ output/demo_run/
 
 ![Dashboard](demo/after_dashboard.png)
 
+### Watch 90-second demo
+
+[Watch the product walkthrough (replace URL)](https://youtu.be/REPLACE_WITH_YOUR_DEMO_ID)
+
 ### What We Don't Do
 
 * We do not guess silently on ambiguous date/numeric values; warnings are emitted.
