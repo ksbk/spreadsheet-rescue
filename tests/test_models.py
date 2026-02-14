@@ -70,3 +70,29 @@ def test_run_manifest_rejects_non_integer_and_negative_counts() -> None:
 
     with pytest.raises(ValueError, match="rows_out"):
         RunManifest(rows_out=-2)
+
+
+def test_run_manifest_failed_requires_error_metadata() -> None:
+    with pytest.raises(ValueError, match="error_code is required"):
+        RunManifest(status="failed", error_message="boom")
+
+    with pytest.raises(ValueError, match="error_message is required"):
+        RunManifest(status="failed", error_code=2)
+
+    payload = RunManifest(
+        run_id="2026-02-14T12:00:00+00:00",
+        status="failed",
+        error_code=2,
+        error_message="bad input",
+    ).to_dict()
+    assert payload["status"] == "failed"
+    assert payload["error_code"] == 2
+    assert payload["error_message"] == "bad input"
+
+
+def test_run_manifest_success_rejects_error_fields() -> None:
+    with pytest.raises(ValueError, match="error_code/error_message"):
+        RunManifest(status="success", error_code=2)
+
+    with pytest.raises(ValueError, match="error_code/error_message"):
+        RunManifest(status="success", error_message="oops")

@@ -69,6 +69,7 @@ class QCReport:
 class RunManifest:
     """Audit-trail manifest for a single pipeline run."""
 
+    run_id: str = ""
     tool: str = "spreadsheet-rescue"
     version: str = ""
     input_path: str = ""
@@ -77,13 +78,28 @@ class RunManifest:
     rows_in: int = 0
     rows_out: int = 0
     sha256: str = ""
+    status: str = "success"
+    error_code: int | None = None
+    error_message: str = ""
 
     def __post_init__(self) -> None:
         self.rows_in = _to_non_negative_int(self.rows_in, "rows_in")
         self.rows_out = _to_non_negative_int(self.rows_out, "rows_out")
+        if self.status not in {"success", "failed"}:
+            raise ValueError("status must be either 'success' or 'failed'")
+        if self.error_code is not None:
+            self.error_code = _to_non_negative_int(self.error_code, "error_code")
+        if self.status == "failed":
+            if self.error_code is None:
+                raise ValueError("error_code is required when status is 'failed'")
+            if not self.error_message:
+                raise ValueError("error_message is required when status is 'failed'")
+        elif self.error_code is not None or self.error_message:
+            raise ValueError("error_code/error_message must be empty when status is 'success'")
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "run_id": self.run_id,
             "tool": self.tool,
             "version": self.version,
             "input_path": self.input_path,
@@ -92,4 +108,7 @@ class RunManifest:
             "rows_in": self.rows_in,
             "rows_out": self.rows_out,
             "sha256": self.sha256,
+            "status": self.status,
+            "error_code": self.error_code,
+            "error_message": self.error_message,
         }

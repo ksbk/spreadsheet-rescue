@@ -151,7 +151,17 @@ def _format_duplicate_columns_message(
     return f"{prefix}: {'; '.join(details)}. Rename or remove one."
 
 
-def _write_manifest(out_dir: Path, input_file: Path, created_at: str, qc: QCReport) -> Path:
+def _write_manifest(
+    out_dir: Path,
+    input_file: Path,
+    run_id: str,
+    created_at: str,
+    qc: QCReport,
+    *,
+    status: str = "success",
+    error_code: int | None = None,
+    error_message: str = "",
+) -> Path:
     sha256 = ""
     try:
         sha256 = sha256_file(input_file)
@@ -159,6 +169,7 @@ def _write_manifest(out_dir: Path, input_file: Path, created_at: str, qc: QCRepo
         pass
 
     manifest = RunManifest(
+        run_id=run_id,
         version=__version__,
         input_path=str(input_file.resolve()),
         output_dir=str(out_dir.resolve()),
@@ -166,6 +177,9 @@ def _write_manifest(out_dir: Path, input_file: Path, created_at: str, qc: QCRepo
         rows_in=qc.rows_in,
         rows_out=qc.rows_out,
         sha256=sha256,
+        status=status,
+        error_code=error_code,
+        error_message=error_message,
     )
     return write_json(out_dir / "run_manifest.json", manifest.to_dict())
 
@@ -173,14 +187,25 @@ def _write_manifest(out_dir: Path, input_file: Path, created_at: str, qc: QCRepo
 def _write_failure_artifacts(
     out_dir: Path,
     input_file: Path,
+    run_id: str,
     created_at: str,
     *,
     message: str,
     rows_in: int = 0,
+    error_code: int = 2,
 ) -> tuple[Path, Path]:
     qc = QCReport(rows_in=rows_in, rows_out=0, dropped_rows=rows_in, warnings=[message])
     qc_path = write_qc_report(out_dir, qc)
-    manifest_path = _write_manifest(out_dir, input_file, created_at, qc)
+    manifest_path = _write_manifest(
+        out_dir,
+        input_file,
+        run_id,
+        created_at,
+        qc,
+        status="failed",
+        error_code=error_code,
+        error_message=message,
+    )
     return qc_path, manifest_path
 
 
@@ -242,13 +267,23 @@ def run(
     """Run the cleaning + reporting pipeline on a spreadsheet."""
     echo = _printer(quiet)
     created_at = utcnow_iso()
+    run_id = created_at
+    out_dir.mkdir(parents=True, exist_ok=True)
     try:
         mapping = _parse_column_map(_load_profile_map(profile) + (col_map or []), quiet=quiet)
     except ValueError as exc:
+        qc_path, manifest_path = _write_failure_artifacts(
+            out_dir,
+            input_file,
+            run_id,
+            created_at,
+            message=str(exc),
+            error_code=2,
+        )
         _err(str(exc))
+        console.print(f"  QC report -> {qc_path}")
+        console.print(f"  Manifest  -> {manifest_path}")
         raise typer.Exit(code=2)
-
-    out_dir.mkdir(parents=True, exist_ok=True)
 
     if not quiet:
         console.print(Panel(
@@ -272,7 +307,12 @@ def run(
         raw_df = load_table(input_file)
     except (FileNotFoundError, ValueError, OSError) as exc:
         qc_path, manifest_path = _write_failure_artifacts(
-            out_dir, input_file, created_at, message=str(exc)
+            out_dir,
+            input_file,
+            run_id,
+            created_at,
+            message=str(exc),
+            error_code=2,
         )
         _err(str(exc))
         console.print(f"  QC report -> {qc_path}")
@@ -283,10 +323,16 @@ def run(
 
     try:
         if raw_df.empty:
-            qc = QCReport(rows_in=0, rows_out=0, warnings=["Input file has 0 rows."])
-            qc_path = write_qc_report(out_dir, qc)
-            manifest_path = _write_manifest(out_dir, input_file, created_at, qc)
-            _err("Input file has 0 rows.")
+            message = "Input file has 0 rows."
+            qc_path, manifest_path = _write_failure_artifacts(
+                out_dir,
+                input_file,
+                run_id,
+                created_at,
+                message=message,
+                error_code=2,
+            )
+            _err(message)
             console.print(f"  QC report -> {qc_path}")
             console.print(f"  Manifest  -> {manifest_path}")
             raise typer.Exit(code=2)
@@ -297,7 +343,13 @@ def run(
                 duplicate_targets, mapping_applied=bool(mapping)
             )
             qc_path, manifest_path = _write_failure_artifacts(
-                out_dir, input_file, created_at, message=message, rows_in=len(raw_df)
+                out_dir,
+                input_file,
+                run_id,
+                created_at,
+                message=message,
+                rows_in=len(raw_df),
+                error_code=2,
             )
             _err(message)
             console.print(f"  QC report -> {qc_path}")
@@ -319,10 +371,20 @@ def run(
         echo(f"  QC report -> {qc_path}")
 
         if qc.missing_columns:
+            message = f"Missing columns: {', '.join(qc.missing_columns)}"
             _err(f"Missing columns: {', '.join(qc.missing_columns)}")
             console.print(f"  Expected: {', '.join(REQUIRED_COLUMNS)}")
             console.print("  Hint: use --map target=source to rename headers")
-            _write_manifest(out_dir, input_file, created_at, qc)
+            _write_manifest(
+                out_dir,
+                input_file,
+                run_id,
+                created_at,
+                qc,
+                status="failed",
+                error_code=2,
+                error_message=message,
+            )
             raise typer.Exit(code=2)
 
         if not quiet:
@@ -345,7 +407,7 @@ def run(
         echo(f"  Report -> {report_path}")
 
         # ── Manifest ─────────────────────────────────────────────
-        manifest_path = _write_manifest(out_dir, input_file, created_at, qc)
+        manifest_path = _write_manifest(out_dir, input_file, run_id, created_at, qc)
         echo(f"  Manifest -> {manifest_path}")
 
         if not quiet:
@@ -358,7 +420,13 @@ def run(
     except Exception as exc:
         message = f"Unexpected internal error: {exc}"
         qc_path, manifest_path = _write_failure_artifacts(
-            out_dir, input_file, created_at, message=message, rows_in=len(raw_df)
+            out_dir,
+            input_file,
+            run_id,
+            created_at,
+            message=message,
+            rows_in=len(raw_df),
+            error_code=1,
         )
         _err(message)
         console.print(f"  QC report -> {qc_path}")
@@ -410,13 +478,23 @@ def validate(
     """
     echo = _printer(quiet)
     created_at = utcnow_iso()
+    run_id = created_at
+    out_dir.mkdir(parents=True, exist_ok=True)
     try:
         mapping = _parse_column_map(_load_profile_map(profile) + (col_map or []), quiet=quiet)
     except ValueError as exc:
+        qc_path, manifest_path = _write_failure_artifacts(
+            out_dir,
+            input_file,
+            run_id,
+            created_at,
+            message=str(exc),
+            error_code=2,
+        )
         _err(str(exc))
+        console.print(f"  QC       -> {qc_path}")
+        console.print(f"  Manifest -> {manifest_path}")
         raise typer.Exit(code=2)
-
-    out_dir.mkdir(parents=True, exist_ok=True)
 
     if not quiet:
         console.print(Panel(
@@ -437,7 +515,12 @@ def validate(
         raw_df = load_table(input_file)
     except (FileNotFoundError, ValueError, OSError) as exc:
         qc_path, manifest_path = _write_failure_artifacts(
-            out_dir, input_file, created_at, message=str(exc)
+            out_dir,
+            input_file,
+            run_id,
+            created_at,
+            message=str(exc),
+            error_code=2,
         )
         _err(str(exc))
         console.print(f"  QC       -> {qc_path}")
@@ -448,10 +531,16 @@ def validate(
 
     try:
         if raw_df.empty:
-            qc = QCReport(rows_in=0, rows_out=0, warnings=["Input file has 0 rows."])
-            qc_path = write_qc_report(out_dir, qc)
-            manifest_path = _write_manifest(out_dir, input_file, created_at, qc)
-            _err("Input file has 0 rows.")
+            message = "Input file has 0 rows."
+            qc_path, manifest_path = _write_failure_artifacts(
+                out_dir,
+                input_file,
+                run_id,
+                created_at,
+                message=message,
+                error_code=2,
+            )
+            _err(message)
             console.print(f"  QC       -> {qc_path}")
             console.print(f"  Manifest -> {manifest_path}")
             raise typer.Exit(code=2)
@@ -462,7 +551,13 @@ def validate(
                 duplicate_targets, mapping_applied=bool(mapping)
             )
             qc_path, manifest_path = _write_failure_artifacts(
-                out_dir, input_file, created_at, message=message, rows_in=len(raw_df)
+                out_dir,
+                input_file,
+                run_id,
+                created_at,
+                message=message,
+                rows_in=len(raw_df),
+                error_code=2,
             )
             _err(message)
             console.print(f"  QC       -> {qc_path}")
@@ -483,7 +578,23 @@ def validate(
             )
 
         qc_path = write_qc_report(out_dir, qc)
-        manifest_path = _write_manifest(out_dir, input_file, created_at, qc)
+        error_message = ""
+        status = "success"
+        error_code: int | None = None
+        if qc.missing_columns:
+            status = "failed"
+            error_code = 2
+            error_message = f"Missing columns: {', '.join(qc.missing_columns)}"
+        manifest_path = _write_manifest(
+            out_dir,
+            input_file,
+            run_id,
+            created_at,
+            qc,
+            status=status,
+            error_code=error_code,
+            error_message=error_message,
+        )
 
         # ── Summary table ────────────────────────────────────────
         if not quiet:
@@ -523,7 +634,13 @@ def validate(
     except Exception as exc:
         message = f"Unexpected internal error: {exc}"
         qc_path, manifest_path = _write_failure_artifacts(
-            out_dir, input_file, created_at, message=message, rows_in=len(raw_df)
+            out_dir,
+            input_file,
+            run_id,
+            created_at,
+            message=message,
+            rows_in=len(raw_df),
+            error_code=1,
         )
         _err(message)
         console.print(f"  QC       -> {qc_path}")

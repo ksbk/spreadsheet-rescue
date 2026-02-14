@@ -29,6 +29,27 @@ def _fixture_path(name: str) -> Path:
     return FIXTURES_DIR / name
 
 
+def _assert_failed_artifacts(
+    out_dir: Path,
+    *,
+    error_code: int,
+    error_substring: str,
+) -> tuple[dict[str, object], dict[str, object]]:
+    qc_path = out_dir / "qc_report.json"
+    manifest_path = out_dir / "run_manifest.json"
+    assert qc_path.exists()
+    assert manifest_path.exists()
+
+    qc = json.loads(qc_path.read_text())
+    manifest = json.loads(manifest_path.read_text())
+
+    assert manifest["status"] == "failed"
+    assert manifest["error_code"] == error_code
+    assert error_substring in manifest["error_message"]
+    assert any(error_substring in w for w in qc["warnings"])
+    return qc, manifest
+
+
 def test_validate_pass_writes_artifacts(tmp_path: Path) -> None:
     csv_path = _write_csv(
         tmp_path,
@@ -46,6 +67,8 @@ def test_validate_pass_writes_artifacts(tmp_path: Path) -> None:
     manifest = json.loads((out_dir / "run_manifest.json").read_text())
     assert qc["missing_columns"] == []
     assert manifest["rows_out"] == 1
+    assert manifest["status"] == "success"
+    assert manifest["error_code"] is None
 
 
 def test_validate_missing_columns_sets_exit_code_and_qc(tmp_path: Path) -> None:
@@ -65,6 +88,9 @@ def test_validate_missing_columns_sets_exit_code_and_qc(tmp_path: Path) -> None:
     assert "cost" in qc["missing_columns"]
     manifest = json.loads((out_dir / "run_manifest.json").read_text())
     assert manifest["rows_out"] == 0
+    assert manifest["status"] == "failed"
+    assert manifest["error_code"] == 2
+    assert "Missing columns: cost" in manifest["error_message"]
 
 
 def test_run_missing_columns_writes_qc_and_manifest(tmp_path: Path) -> None:
@@ -83,6 +109,10 @@ def test_run_missing_columns_writes_qc_and_manifest(tmp_path: Path) -> None:
     assert (out_dir / "qc_report.json").exists()
     assert (out_dir / "run_manifest.json").exists()
     assert not (out_dir / "Final_Report.xlsx").exists()
+    manifest = json.loads((out_dir / "run_manifest.json").read_text())
+    assert manifest["status"] == "failed"
+    assert manifest["error_code"] == 2
+    assert "Missing columns: cost" in manifest["error_message"]
 
 
 def test_map_allows_renamed_headers(tmp_path: Path) -> None:
@@ -494,6 +524,125 @@ def test_map_empty_target_fails(tmp_path: Path) -> None:
 
     assert result.exit_code == 2
     assert "non-empty target and source" in result.stdout
+
+
+def test_validate_map_invalid_format_writes_artifacts(tmp_path: Path) -> None:
+    csv_path = _write_csv(
+        tmp_path,
+        "ok.csv",
+        "date,product,region,revenue,cost,units\n2024-01-01,Widget,US,10,5,1\n",
+    )
+    out_dir = tmp_path / "validate_invalid_map_out"
+
+    result = runner.invoke(
+        app,
+        [
+            "validate",
+            "--input",
+            str(csv_path),
+            "--out-dir",
+            str(out_dir),
+            "--map",
+            "invalid",
+            "--quiet",
+        ],
+    )
+
+    assert result.exit_code == 2
+    _assert_failed_artifacts(out_dir, error_code=2, error_substring="Invalid --map value")
+
+
+def test_run_map_empty_target_writes_artifacts(tmp_path: Path) -> None:
+    csv_path = _write_csv(
+        tmp_path,
+        "ok.csv",
+        "date,product,region,revenue,cost,units\n2024-01-01,Widget,US,10,5,1\n",
+    )
+    out_dir = tmp_path / "run_map_empty_target_out"
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--input",
+            str(csv_path),
+            "--out-dir",
+            str(out_dir),
+            "--map",
+            "=source",
+            "--quiet",
+        ],
+    )
+
+    assert result.exit_code == 2
+    _assert_failed_artifacts(out_dir, error_code=2, error_substring="non-empty target and source")
+
+
+def test_validate_profile_parse_error_writes_artifacts(tmp_path: Path) -> None:
+    profile_path = tmp_path / "bad_profile.txt"
+    profile_path.write_text("invalid_line_without_equals\n")
+    csv_path = _write_csv(
+        tmp_path,
+        "ok.csv",
+        "date,product,region,revenue,cost,units\n2024-01-01,Widget,US,10,5,1\n",
+    )
+    out_dir = tmp_path / "validate_bad_profile_out"
+
+    result = runner.invoke(
+        app,
+        [
+            "validate",
+            "--input",
+            str(csv_path),
+            "--out-dir",
+            str(out_dir),
+            "--profile",
+            str(profile_path),
+            "--quiet",
+        ],
+    )
+
+    assert result.exit_code == 2
+    _assert_failed_artifacts(out_dir, error_code=2, error_substring="target=source")
+
+
+@pytest.mark.parametrize(
+    ("command", "scenario"),
+    [
+        ("validate", "invalid_map"),
+        ("run", "empty_target"),
+        ("validate", "bad_profile"),
+    ],
+)
+def test_parse_failures_emit_failed_manifest_metadata(
+    tmp_path: Path,
+    command: str,
+    scenario: str,
+) -> None:
+    csv_path = _write_csv(
+        tmp_path,
+        "ok.csv",
+        "date,product,region,revenue,cost,units\n2024-01-01,Widget,US,10,5,1\n",
+    )
+    out_dir = tmp_path / f"{command}_{scenario}_out"
+    args = [command, "--input", str(csv_path), "--out-dir", str(out_dir), "--quiet"]
+
+    if scenario == "invalid_map":
+        args += ["--map", "invalid"]
+        expected = "Invalid --map value"
+    elif scenario == "empty_target":
+        args += ["--map", "=source"]
+        expected = "non-empty target and source"
+    else:
+        profile_path = tmp_path / "bad_profile.txt"
+        profile_path.write_text("invalid_line_without_equals\n")
+        args += ["--profile", str(profile_path)]
+        expected = "target=source"
+
+    result = runner.invoke(app, args)
+
+    assert result.exit_code == 2
+    _assert_failed_artifacts(out_dir, error_code=2, error_substring=expected)
 
 
 def test_map_override_warning(tmp_path: Path) -> None:
@@ -928,6 +1077,10 @@ def test_run_unexpected_internal_error_exits_with_code_1_and_artifacts(
     assert (out_dir / "qc_report.json").exists()
     assert (out_dir / "run_manifest.json").exists()
     assert not (out_dir / "Final_Report.xlsx").exists()
+    manifest = json.loads((out_dir / "run_manifest.json").read_text())
+    assert manifest["status"] == "failed"
+    assert manifest["error_code"] == 1
+    assert "Unexpected internal error: boom" in manifest["error_message"]
 
 
 def test_validate_nonquiet_with_profile_shows_profile_line(tmp_path: Path) -> None:
@@ -1008,3 +1161,7 @@ def test_validate_unexpected_internal_error_exits_with_code_1_and_artifacts(
     assert "Unexpected internal error: boom" in result.stdout
     assert (out_dir / "qc_report.json").exists()
     assert (out_dir / "run_manifest.json").exists()
+    manifest = json.loads((out_dir / "run_manifest.json").read_text())
+    assert manifest["status"] == "failed"
+    assert manifest["error_code"] == 1
+    assert "Unexpected internal error: boom" in manifest["error_message"]
