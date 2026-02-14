@@ -1,31 +1,43 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TARGET_VERSION="0.1.4"
-TARGET_TAG="v${TARGET_VERSION}"
 DRY_RUN=false
+RAW_VERSION=""
+VERSION=""
+TAG=""
 
 usage() {
   cat <<'EOF'
 Usage:
-  ./scripts/release.sh [--dry-run]
+  ./scripts/release.sh <VERSION|vVERSION> [--dry-run]
 
-This script runs full release checks, bumps version to 0.1.4,
-and creates git tag v0.1.4.
+Examples:
+  ./scripts/release.sh 0.1.4
+  ./scripts/release.sh v0.1.4 --dry-run
 EOF
 }
 
-if [[ $# -gt 1 ]]; then
+if [[ $# -lt 1 || $# -gt 2 ]]; then
   usage
-  exit 1
+  exit 2
 fi
 
-if [[ $# -eq 1 ]]; then
-  if [[ "$1" == "--dry-run" ]]; then
+RAW_VERSION="$1"
+VERSION="${RAW_VERSION#v}"
+TAG="v${VERSION}"
+
+if [[ -z "$VERSION" ]]; then
+  echo "Error: version must be non-empty." >&2
+  usage
+  exit 2
+fi
+
+if [[ $# -eq 2 ]]; then
+  if [[ "$2" == "--dry-run" ]]; then
     DRY_RUN=true
   else
     usage
-    exit 1
+    exit 2
   fi
 fi
 
@@ -42,17 +54,17 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 1
 fi
 
-if git rev-parse -q --verify "refs/tags/${TARGET_TAG}" >/dev/null; then
-  echo "Error: local tag '${TARGET_TAG}' already exists." >&2
+if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+  echo "Error: local tag '${TAG}' already exists." >&2
   exit 1
 fi
 
-if git ls-remote --tags --refs origin "refs/tags/${TARGET_TAG}" | grep -q "refs/tags/${TARGET_TAG}$"; then
-  echo "Error: remote tag '${TARGET_TAG}' already exists on origin." >&2
+if git ls-remote --tags --refs origin "refs/tags/${TAG}" | grep -q "refs/tags/${TAG}$"; then
+  echo "Error: remote tag '${TAG}' already exists on origin." >&2
   exit 1
 fi
 
-NOTES_FILE="docs/releases/${TARGET_TAG}.md"
+NOTES_FILE="docs/releases/${TAG}.md"
 if [[ ! -f "$NOTES_FILE" ]]; then
   echo "Error: missing release notes file: ${NOTES_FILE}" >&2
   exit 1
@@ -64,9 +76,9 @@ if [[ "$DRY_RUN" == "true" ]]; then
   echo "[dry-run] Would run: uv run pytest -q"
   echo "[dry-run] Would run: uv run ./scripts/smoke_install.sh"
   echo "[dry-run] Would run: make customer-pack"
-  echo "[dry-run] Would bump version to ${TARGET_VERSION}"
-  echo "[dry-run] Would commit: release: ${TARGET_TAG}"
-  echo "[dry-run] Would create tag: ${TARGET_TAG}"
+  echo "[dry-run] Would bump version to ${VERSION}"
+  echo "[dry-run] Would commit: release: ${TAG}"
+  echo "[dry-run] Would create tag: ${TAG}"
   exit 0
 fi
 
@@ -90,12 +102,13 @@ git checkout -- \
   demo/output/qc.json \
   demo/output/manifest.json
 
-echo "[release] Bumping version to ${TARGET_VERSION}"
-python - <<'PY'
+echo "[release] Bumping version to ${VERSION}"
+VERSION="${VERSION}" python - <<'PY'
+import os
 from pathlib import Path
 import re
 
-version = "0.1.4"
+version = os.environ["VERSION"]
 
 pyproject = Path("pyproject.toml")
 text = pyproject.read_text(encoding="utf-8")
@@ -121,25 +134,25 @@ uv lock
 git add pyproject.toml src/spreadsheet_rescue/__init__.py tests/test_cli.py uv.lock "$NOTES_FILE"
 
 if ! git diff --cached --quiet; then
-  git commit -m "release: ${TARGET_TAG}"
+  git commit -m "release: ${TAG}"
 else
-  echo "[release] Version files already at ${TARGET_VERSION}; tagging current HEAD."
+  echo "[release] Version files already at ${VERSION}; tagging current HEAD."
 fi
 
 # Re-check tag collisions immediately before tagging to avoid race conditions.
-if git rev-parse -q --verify "refs/tags/${TARGET_TAG}" >/dev/null; then
-  echo "Error: local tag '${TARGET_TAG}' already exists before tagging step." >&2
+if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+  echo "Error: local tag '${TAG}' already exists before tagging step." >&2
   exit 1
 fi
 
-if git ls-remote --tags --refs origin "refs/tags/${TARGET_TAG}" | grep -q "refs/tags/${TARGET_TAG}$"; then
-  echo "Error: remote tag '${TARGET_TAG}' appeared before tagging step." >&2
+if git ls-remote --tags --refs origin "refs/tags/${TAG}" | grep -q "refs/tags/${TAG}$"; then
+  echo "Error: remote tag '${TAG}' appeared before tagging step." >&2
   exit 1
 fi
 
-git tag -a "${TARGET_TAG}" -m "${TARGET_TAG}"
+git tag -a "${TAG}" -m "${TAG}"
 
 echo "Release prepared:"
-echo "  commit: release: ${TARGET_TAG}"
-echo "  tag:    ${TARGET_TAG}"
-echo "Next: git push && git push origin ${TARGET_TAG}"
+echo "  commit: release: ${TAG}"
+echo "  tag:    ${TAG}"
+echo "Next: git push && git push origin ${TAG}"
