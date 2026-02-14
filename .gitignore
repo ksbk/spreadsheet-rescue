@@ -26,17 +26,15 @@ output/
 *.xlsx
 !demo/output/
 !demo/output/Final_Report.xlsx
+site/
 
 # IDE
 .vscode/
 .idea/
 
-# Local tooling caches
+# Local tooling cache
 .trunk/
 
 # OS
 .DS_Store
 Thumbs.db
-
-# Local tooling cache
-.trunk/

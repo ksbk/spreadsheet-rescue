@@ -27,7 +27,16 @@ restore_demo_artifacts() {
   git restore --worktree -- "${TRACKED_DEMO_ARTIFACTS[@]}" >/dev/null 2>&1 || true
 }
 
-trap restore_demo_artifacts EXIT
+SITE_TMP_DIR=""
+
+cleanup() {
+  restore_demo_artifacts
+  if [[ -n "${SITE_TMP_DIR}" && -d "${SITE_TMP_DIR}" ]]; then
+    rm -rf "${SITE_TMP_DIR}"
+  fi
+}
+
+trap cleanup EXIT
 
 echo "[preflight] Running quality checks"
 uv run ruff check src tests scripts
@@ -44,14 +53,15 @@ echo "[preflight] Building customer pack"
 make customer-pack
 
 echo "[preflight] Building docs"
-uv run --with mkdocs mkdocs build --strict
+SITE_TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/srescue-preflight-site-XXXXXX")"
+uv run --with mkdocs mkdocs build --strict --site-dir "${SITE_TMP_DIR}"
 
 echo "[preflight] Restoring tracked demo artifacts"
-restore_demo_artifacts
+cleanup
 trap - EXIT
 
-if [[ -n "$(git status --porcelain -- "${TRACKED_DEMO_ARTIFACTS[@]}")" ]]; then
-  echo "Error: tracked demo artifacts still dirty after preflight." >&2
+if [[ -n "$(git status --porcelain)" ]]; then
+  echo "Error: working tree is dirty after preflight." >&2
   exit 1
 fi
 
