@@ -335,7 +335,7 @@ def test_version_flag_prints_and_exits(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert "spreadsheet-rescue" in result.stdout
-    assert "v0.1.1" in result.stdout
+    assert "v0.1.2" in result.stdout
 
 
 def test_validate_passes_date_and_number_parse_flags(

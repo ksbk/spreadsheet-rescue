@@ -1,4 +1,4 @@
-# spreadsheet-rescue PRD (v0.1.1)
+# spreadsheet-rescue PRD (v0.1.2)
 
 ## Product promise
 
@@ -8,7 +8,7 @@ Convert messy spreadsheet exports into a deterministic, client-ready Excel repor
 
 Freelancers, finance/admin/ops users, and SMB analysts who receive recurring CSV/XLSX exports and need trustworthy weekly reporting.
 
-## In-scope (v0.1.1)
+## In-scope (v0.1.2)
 
 * CLI commands: `srescue run`, `srescue validate`
 * Input formats: `.csv`, `.xlsx`, `.xls`
@@ -126,7 +126,7 @@ Exit codes:
 * `2` input/contract violation (missing columns, duplicate columns, unreadable input, empty input)
 * `1` unexpected/internal failure
 
-## Non-goals (v0.1.1)
+## Non-goals (v0.1.2)
 
 * Schema inference beyond required-column contract
 * Business-specific rule engines (tax logic, FX conversions, account mappings)

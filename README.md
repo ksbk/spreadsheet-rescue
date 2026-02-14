@@ -22,9 +22,11 @@ output/demo_run/
   Final_Report.xlsx
   qc_report.json
   run_manifest.json
+demo/
+  dashboard.png
 ```
 
-![Dashboard](demo/after_dashboard.png)
+![Dashboard](demo/dashboard.png)
 
 ### Watch 90-second demo
 
@@ -118,6 +120,7 @@ You'll find:
 * `output/demo_run/Final_Report.xlsx`
 * `output/demo_run/qc_report.json`
 * `output/demo_run/run_manifest.json`
+* `demo/dashboard.png` (deterministic preview)
 * walkthrough: `docs/demo/DEMO.md`
 
 ---
@@ -126,7 +129,7 @@ You'll find:
 
 **Tech stack:** Python • pandas • openpyxl • typer • rich
 
-Pipeline (v0.1.1):
+Pipeline (v0.1.2):
 
 ```
 Load table (CSV/XLSX/XLS)
@@ -164,7 +167,7 @@ This contract is intentionally stable so you can build workflows (or a future we
 
 ## QC & Reliability
 
-### v0.1.1 QC rules
+### v0.1.2 QC rules
 
 * Missing required columns → **hard fail** (exit code `2`) but still write `qc_report.json`
 * Duplicate columns after header normalization / `--map` → **hard fail** (exit code `2`)
@@ -185,7 +188,7 @@ This contract is intentionally stable so you can build workflows (or a future we
 
 ## Configuration
 
-### v0.1.1 defaults
+### v0.1.2 defaults
 
 Required columns (case-insensitive):
 
@@ -268,7 +271,7 @@ uv run pytest -q
 
 ## Roadmap
 
-### v0.1.1 — MVP (current)
+### v0.1.2 — MVP (current)
 
 * [x] CLI `srescue run`
 * [x] CLI `srescue validate` (preflight)
@@ -280,6 +283,7 @@ uv run pytest -q
 * [x] `--map` column remapping
 * [x] Exit-code contract (0 success, 2 schema failure)
 * [x] Demo pack (`docs/demo/` + `examples/input/` + `scripts/demo.sh`)
+* [x] Deterministic `demo/dashboard.png` preview renderer + checks
 * [ ] Add 2–3 more example datasets
 
 ### v0.2 — High-leverage upgrades
@@ -320,6 +324,14 @@ If you want this done for your specific spreadsheets, I offer:
 ---
 
 ## Changelog
+
+### 2026-02-14 — v0.1.2
+
+* Added deterministic dashboard preview renderer: `scripts/render_dashboard_preview.py`
+* `./scripts/demo.sh` now generates `demo/dashboard.png` after the run
+* Added demo-asset guardrail tests in `tests/test_demo_assets.py`
+* Added CI demo smoke check for `demo/dashboard.png`
+* Updated package version to `0.1.2`
 
 ### 2026-02-13 — v0.1.1
 

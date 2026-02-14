@@ -23,6 +23,7 @@ This writes:
 * `output/demo_run/Final_Report.xlsx`
 * `output/demo_run/qc_report.json`
 * `output/demo_run/run_manifest.json`
+* `demo/dashboard.png` (deterministic preview rendered from the Dashboard sheet)
 
 ## 3) After: what to show in a live demo
 
@@ -37,3 +38,11 @@ Narration points:
 * Mixed locale numbers are parsed deterministically.
 * Ambiguous date/numeric values are warned, not hidden.
 * Output includes audit artifacts (`qc_report.json`, `run_manifest.json`) every run.
+
+Manual preview render (if needed):
+
+```bash
+uv run --with pillow python scripts/render_dashboard_preview.py \
+  --workbook output/demo_run/Final_Report.xlsx \
+  --output demo/dashboard.png
+```
