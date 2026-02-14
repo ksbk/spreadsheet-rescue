@@ -69,6 +69,12 @@ jobs:
           test -f demo/clean_data.png
           test -f demo/weekly.png
 
+      - name: Build customer demo pack
+        run: make customer-pack
+
+      - name: Verify customer demo pack
+        run: test -f dist/customer-demo-pack.zip
+
   install_smoke:
     runs-on: ubuntu-latest
     needs: demo_smoke

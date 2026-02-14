@@ -1,4 +1,4 @@
-.PHONY: help install dev lint format typecheck test coverage demo build twine-check smoke-install release-tag clean distclean
+.PHONY: help install dev lint format typecheck test coverage demo build twine-check smoke-install customer-pack release-tag clean distclean
 
 VENV      := .venv
 PYTHON    := $(VENV)/bin/python
@@ -58,6 +58,10 @@ twine-check: build ## Validate built distributions
 
 smoke-install: ## Build wheel, install in clean venv, and run demo smoke
 	uv run --with build bash ./scripts/smoke_install.sh
+
+customer-pack: ## Build customer demo pack zip for buyer evaluation
+	uv run python ./scripts/build_customer_demo_pack.py
+	@echo "Pack: dist/customer-demo-pack.zip"
 
 release-tag: ## Create and push a release tag (VERSION=v0.1.3)
 	@test -n "$(VERSION)" || (echo "VERSION is required (e.g. make release-tag VERSION=v0.1.3)" && exit 1)
