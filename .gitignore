@@ -37,3 +37,6 @@ output/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local tooling cache
+.trunk/
