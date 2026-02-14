@@ -1,4 +1,4 @@
-.PHONY: help install dev lint format typecheck test coverage demo clean distclean
+.PHONY: help install dev lint format typecheck test coverage demo build twine-check smoke-install release-tag clean distclean
 
 VENV      := .venv
 PYTHON    := $(VENV)/bin/python
@@ -18,9 +18,9 @@ $(VENV)/bin/activate:
 install: $(VENV)/bin/activate ## Install package (editable) into venv
 	$(PIP) install -e .
 
-dev: $(VENV)/bin/activate ## Install package + dev tools (ruff, mypy, pytest)
+dev: $(VENV)/bin/activate ## Install package + dev tools (ruff, mypy, pytest, build, twine)
 	$(PIP) install -e ".[dev]" 2>/dev/null || $(PIP) install -e .
-	$(PIP) install ruff mypy pytest
+	$(PIP) install ruff mypy pytest build twine
 
 # ── Quality ──────────────────────────────────────────────────────
 
@@ -49,6 +49,20 @@ demo: install ## Run pipeline on demo dataset
 	@echo ""
 	@echo "Output:"
 	@ls -lh $(DEMO_DIR)/
+
+build: ## Build source and wheel distributions
+	uv run --with build python -m build
+
+twine-check: build ## Validate built distributions
+	uv run --with twine twine check dist/*
+
+smoke-install: ## Build wheel, install in clean venv, and run demo smoke
+	uv run --with build bash ./scripts/smoke_install.sh
+
+release-tag: ## Create and push a release tag (VERSION=v0.1.3)
+	@test -n "$(VERSION)" || (echo "VERSION is required (e.g. make release-tag VERSION=v0.1.3)" && exit 1)
+	git tag -a $(VERSION) -m "$(VERSION)"
+	git push origin $(VERSION)
 
 version: ## Print tool version
 	$(SRESCUE) --version

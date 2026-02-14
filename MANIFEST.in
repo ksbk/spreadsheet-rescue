@@ -1,0 +1,10 @@
+include LICENSE
+include README.md
+include THIRD_PARTY_NOTICES.md
+include assets/fonts/LICENSE
+include assets/fonts/DejaVuSans.ttf
+include assets/fonts/DejaVuSans-Bold.ttf
+recursive-include src/spreadsheet_rescue/assets/fonts *.ttf LICENSE
+prune demo/output
+exclude demo/dashboard.png
+exclude demo/after_dashboard.png
