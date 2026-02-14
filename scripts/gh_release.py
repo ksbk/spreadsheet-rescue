@@ -39,6 +39,11 @@ def main() -> None:
         action="store_true",
         help="Run `make customer-pack` before publishing release.",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Allow running with a dirty working tree.",
+    )
     args = parser.parse_args()
 
     repo_root = _repo_root()
@@ -47,6 +52,30 @@ def main() -> None:
 
     if shutil.which("gh") is None:
         raise SystemExit("Error: GitHub CLI `gh` is required.")
+
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=repo_root,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    if status.stdout.strip() and not args.force:
+        raise SystemExit(
+            "Error: working tree is dirty. Commit/stash changes first or pass --force."
+        )
+
+    remote_tag = subprocess.run(
+        ["git", "ls-remote", "--tags", "--refs", "origin", f"refs/tags/{args.tag}"],
+        cwd=repo_root,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    if not remote_tag.stdout.strip():
+        raise SystemExit(
+            f"Error: tag {args.tag} is not on origin. Push tag before creating the release."
+        )
 
     if not notes.exists():
         raise SystemExit(f"Error: release notes file not found: {notes}")

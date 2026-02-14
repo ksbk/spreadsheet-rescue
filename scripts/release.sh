@@ -37,7 +37,7 @@ if ! git rev-parse --git-dir >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! git diff --quiet || ! git diff --cached --quiet; then
+if [[ -n "$(git status --porcelain)" ]]; then
   echo "Error: working tree is not clean. Commit/stash changes first." >&2
   exit 1
 fi
@@ -124,6 +124,17 @@ if ! git diff --cached --quiet; then
   git commit -m "release: ${TARGET_TAG}"
 else
   echo "[release] Version files already at ${TARGET_VERSION}; tagging current HEAD."
+fi
+
+# Re-check tag collisions immediately before tagging to avoid race conditions.
+if git rev-parse -q --verify "refs/tags/${TARGET_TAG}" >/dev/null; then
+  echo "Error: local tag '${TARGET_TAG}' already exists before tagging step." >&2
+  exit 1
+fi
+
+if git ls-remote --tags --refs origin "refs/tags/${TARGET_TAG}" | grep -q "refs/tags/${TARGET_TAG}$"; then
+  echo "Error: remote tag '${TARGET_TAG}' appeared before tagging step." >&2
+  exit 1
 fi
 
 git tag -a "${TARGET_TAG}" -m "${TARGET_TAG}"
