@@ -1,0 +1,14 @@
+{
+  "created_at_utc": "2026-02-14T19:19:14.263938+00:00",
+  "error_code": null,
+  "error_message": "",
+  "input_path": "/Users/ksb/dev/spreadsheet-rescue/demo/input/messy_sales.csv",
+  "output_dir": "/Users/ksb/dev/spreadsheet-rescue/demo/output",
+  "rows_in": 7,
+  "rows_out": 6,
+  "run_id": "2026-02-14T19:19:14.263938+00:00",
+  "sha256": "a3a06743f33bef1b26c05b9a10036bf1d1b0daa500de2c9a01605604b9a50977",
+  "status": "success",
+  "tool": "spreadsheet-rescue",
+  "version": "0.1.2"
+}

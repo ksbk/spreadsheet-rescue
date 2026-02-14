@@ -4,7 +4,7 @@ VENV      := .venv
 PYTHON    := $(VENV)/bin/python
 PIP       := $(VENV)/bin/pip
 SRESCUE   := $(VENV)/bin/srescue
-DEMO_DIR  := output/demo_run
+DEMO_DIR  := demo/output
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \

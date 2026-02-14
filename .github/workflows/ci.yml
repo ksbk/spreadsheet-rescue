@@ -62,7 +62,7 @@ jobs:
 
       - name: Verify demo artifacts
         run: |
-          test -f output/demo_run/Final_Report.xlsx
-          test -f output/demo_run/qc_report.json
-          test -f output/demo_run/run_manifest.json
+          test -f demo/output/Final_Report.xlsx
+          test -f demo/output/qc.json
+          test -f demo/output/manifest.json
           test -f demo/dashboard.png

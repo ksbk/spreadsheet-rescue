@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import struct
 import subprocess
 from pathlib import Path
@@ -137,6 +138,33 @@ def test_dashboard_preview_asset_exists_and_is_valid() -> None:
     assert width >= 1280
     assert height >= 720
     assert png_path.stat().st_size >= MIN_ASSET_SIZE_BYTES
+
+
+def test_demo_output_artifacts_exist_and_contain_expected_keys() -> None:
+    root = Path(__file__).resolve().parent.parent
+    out_dir = root / "demo" / "output"
+
+    report_path = out_dir / "Final_Report.xlsx"
+    qc_path = out_dir / "qc.json"
+    manifest_path = out_dir / "manifest.json"
+
+    assert report_path.exists(), "Missing demo/output/Final_Report.xlsx"
+    assert report_path.stat().st_size > 0, "Demo workbook is empty"
+    assert qc_path.exists(), "Missing demo/output/qc.json"
+    assert manifest_path.exists(), "Missing demo/output/manifest.json"
+
+    qc = json.loads(qc_path.read_text(encoding="utf-8"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    assert {"rows_in", "rows_out", "warnings"}.issubset(qc.keys())
+    assert isinstance(qc["rows_in"], int)
+    assert isinstance(qc["rows_out"], int)
+    assert isinstance(qc["warnings"], list)
+
+    assert {"status", "error_code", "rows_in", "rows_out"}.issubset(manifest.keys())
+    assert manifest["status"] in {"success", "failed"}
+    assert isinstance(manifest["rows_in"], int)
+    assert isinstance(manifest["rows_out"], int)
 
 
 def test_renderer_errors_when_workbook_missing(tmp_path: Path) -> None:

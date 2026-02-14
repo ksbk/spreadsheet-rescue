@@ -33,8 +33,9 @@ def _repo_root() -> Path:
 def _default_workbook_path() -> Path:
     root = _repo_root()
     candidates = [
-        root / "demo" / "Final_Report.xlsx",
+        root / "demo" / "output" / "Final_Report.xlsx",
         root / "output" / "demo_run" / "Final_Report.xlsx",
+        root / "demo" / "Final_Report.xlsx",
         root / "outputs" / "Final_Report.xlsx",
     ]
     for candidate in candidates:
@@ -397,7 +398,13 @@ def _draw_top_drivers(
             radius=10,
             width=2,
         )
-        draw.text((x1 + 20, pair_top + 43), label, font=fonts["pair_label"], fill="#3A5676", anchor="lm")
+        draw.text(
+            (x1 + 20, pair_top + 43),
+            label,
+            font=fonts["pair_label"],
+            fill="#3A5676",
+            anchor="lm",
+        )
         label_width = draw.textlength(label, font=fonts["pair_label"])
         value_x = int(x1 + 20 + label_width + 18)
         available = max(20.0, float(x2 - value_x - 20))
@@ -407,7 +414,13 @@ def _draw_top_drivers(
             draw=draw,
             font=fonts["pair_value"],
         )
-        draw.text((value_x, pair_top + 43), rendered_value, font=fonts["pair_value"], fill="#172A43", anchor="lm")
+        draw.text(
+            (value_x, pair_top + 43),
+            rendered_value,
+            font=fonts["pair_value"],
+            fill="#172A43",
+            anchor="lm",
+        )
 
 
 def _draw_warnings(
@@ -423,7 +436,13 @@ def _draw_warnings(
         radius=10,
         width=2,
     )
-    draw.text((76, 760), "Warnings & Actions", font=fonts["warnings_header"], fill="#2E1E0F", anchor="lm")
+    draw.text(
+        (76, 760),
+        "Warnings & Actions",
+        font=fonts["warnings_header"],
+        fill="#2E1E0F",
+        anchor="lm",
+    )
 
     line_top = 804
     line_h = 44
@@ -445,7 +464,13 @@ def _draw_warnings(
             draw=draw,
             font=fonts["warning"],
         )
-        draw.text((74, y1 + (line_h // 2) - 2), f"• {rendered_warning}", font=fonts["warning"], fill="#9A6114", anchor="lm")
+        draw.text(
+            (74, y1 + (line_h // 2) - 2),
+            f"• {rendered_warning}",
+            font=fonts["warning"],
+            fill="#9A6114",
+            anchor="lm",
+        )
 
 
 def render_dashboard_preview(workbook_path: Path, output_path: Path) -> Path:
@@ -487,7 +512,10 @@ def main() -> None:
         "--workbook",
         type=Path,
         default=_default_workbook_path(),
-        help="Path to Final_Report.xlsx (default: demo/Final_Report.xlsx or output/demo_run/Final_Report.xlsx).",
+        help=(
+            "Path to Final_Report.xlsx "
+            "(default: demo/output/Final_Report.xlsx or output/demo_run/Final_Report.xlsx)."
+        ),
     )
     parser.add_argument(
         "--output",

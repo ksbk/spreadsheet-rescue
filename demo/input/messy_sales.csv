@@ -1,0 +1,8 @@
+ Order Date , Product Name , Sales Region , Gross Revenue , Cost (€) , Units Sold 
+01/02/2024,Widget A,North,"1.200,50","200,25","2,0"
+2024-01-03,Gadget B,South,"1,234.56",700.10,3
+02/01/2024,Widget C,West,"980,00","450,00","2,0"
+2024/01/10,"=HYPERLINK(""https://example.com"",""Click"")",East,450,200,2
+not-a-date,Widget D,Central,100,80,1
+2024-01-15,North Hub,North,"2.500,75","1.000,25",5
+2024-01-18,South Hub,South,1700.00,650.00,4

@@ -1,48 +1,39 @@
 # Demo Script (2 minutes)
 
-## 1) Before: messy input
+## 1) Input used by the demo
 
-`examples/input/sample_messy_sales.csv` contains realistic issues:
+The demo reads:
+- `demo/input/messy_sales.csv`
 
-```csv
-date,product,region,revenue,cost,units
-01/02/2024,Widget A,North,"1.200,50","200,25","2,0"
-2024-01-03,Gadget B,South,"1,234.56",700.10,3
-not-a-date,Widget C,West,100,80,1
-2024-01-05,"=HYPERLINK(""https://example.com"",""Click"")",East,450,200,2
-```
+It includes realistic issues:
+- ambiguous dates (`01/02/2024`, `02/01/2024`)
+- mixed locale numerics (`1.200,50`, `1,234.56`)
+- non-standard headers mapped via `--map`
+- formula-like text values (escaped in Excel output)
 
-## 2) One command
+## 2) Run one command
 
 ```bash
 ./scripts/demo.sh
 ```
 
-This writes:
+## 3) Demo artifacts
 
-* `output/demo_run/Final_Report.xlsx`
-* `output/demo_run/qc_report.json`
-* `output/demo_run/run_manifest.json`
-* `demo/dashboard.png` (deterministic preview rendered from the Dashboard sheet)
+- `demo/output/Final_Report.xlsx`
+- `demo/output/qc.json`
+- `demo/output/manifest.json`
+- `demo/dashboard.png`
 
-## 3) After: what to show in a live demo
-
-Screenshot checklist:
-* `Dashboard` sheet: rows in/out, warnings, KPI cards
-* `Clean_Data` sheet: cleaned typed values and escaped formula-like text
-* `Weekly` sheet: week-level totals
-* `Top_Products` sheet: ranked product revenue/profit
-* `Top_Regions` sheet: ranked region revenue/profit
-
-Narration points:
-* Mixed locale numbers are parsed deterministically.
-* Ambiguous date/numeric values are warned, not hidden.
-* Output includes audit artifacts (`qc_report.json`, `run_manifest.json`) every run.
-
-Manual preview render (if needed):
+Manual PNG render (optional):
 
 ```bash
 uv run --with pillow python scripts/render_dashboard_preview.py \
-  --workbook output/demo_run/Final_Report.xlsx \
+  --workbook demo/output/Final_Report.xlsx \
   --output demo/dashboard.png
 ```
+
+## 4) What to show live
+
+- `Dashboard`: rows in/out, dropped rows, warnings, KPI cards
+- `Clean_Data`: cleaned values + formula-safe string output
+- `Weekly`, `Top_Products`, `Top_Regions`: summarized reporting tables
