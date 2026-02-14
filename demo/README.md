@@ -23,6 +23,10 @@ Snippet:
 - `demo/clean_data.png`
 - `demo/weekly.png`
 
+Customer pack convenience launchers (inside `dist/customer-demo-pack.zip`):
+- `dist/RUN_DEMO.command` (macOS)
+- `dist/run_demo.bat` (Windows)
+
 ## Proof images
 
 ![Dashboard](dashboard.png)

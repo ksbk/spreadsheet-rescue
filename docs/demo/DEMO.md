@@ -28,6 +28,7 @@ This dataset includes ambiguous dates, mixed numeric locales, non-standard heade
 - `demo/dashboard.png`
 - `demo/clean_data.png`
 - `demo/weekly.png`
+- `dist/customer-demo-pack.zip` (includes `dist/RUN_DEMO.command` + `dist/run_demo.bat`)
 
 ## 4) Proof images
 

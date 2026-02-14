@@ -34,7 +34,11 @@ open demo/output/Final_Report.xlsx
 
 Notes:
 - `make customer-pack` generates `dist/customer-demo-pack.zip` for email-ready buyer evaluation.
+- The zip includes `dist/RUN_DEMO.command` (macOS) and `dist/run_demo.bat` (Windows) for one-click proof review.
 - `open` is macOS; on Linux/Windows open the workbook manually from `demo/output/`.
+
+Maintainer preflight:
+- `make preflight` runs lint/type/tests + smoke/demo/customer-pack + strict docs build without bumping/tagging.
 
 ## 90-second walkthrough
 

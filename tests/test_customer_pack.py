@@ -26,6 +26,8 @@ REQUIRED_NAMES = {
     "demo/dashboard.png",
     "demo/clean_data.png",
     "demo/weekly.png",
+    "dist/RUN_DEMO.command",
+    "dist/run_demo.bat",
     "dist/README.txt",
 }
 
@@ -90,9 +92,15 @@ def test_build_customer_pack_contains_required_files_and_keys(tmp_path: Path) ->
 
         qc = json.loads(zf.read("demo/output/qc.json").decode("utf-8"))
         manifest = json.loads(zf.read("demo/output/manifest.json").decode("utf-8"))
+        run_demo_mac = zf.read("dist/RUN_DEMO.command").decode("utf-8")
+        run_demo_win = zf.read("dist/run_demo.bat").decode("utf-8")
 
     assert {"rows_in", "rows_out", "warnings"}.issubset(qc.keys())
     assert {"status", "error_code", "rows_in", "rows_out"}.issubset(manifest.keys())
+    assert run_demo_mac.startswith("#!/usr/bin/env bash")
+    assert "Final_Report.xlsx" in run_demo_mac
+    assert run_demo_win.startswith("@echo off")
+    assert "Final_Report.xlsx" in run_demo_win
 
 
 def test_customer_pack_is_deterministic(tmp_path: Path) -> None:
