@@ -17,6 +17,17 @@ PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 EXPECTED_WIDTH = 1920
 EXPECTED_HEIGHT = 1080
 MIN_ASSET_SIZE_BYTES = 40 * 1024
+MIN_PREVIEW_WIDTH = 1200
+MIN_PREVIEW_HEIGHT = 700
+
+
+def _assert_png_asset(path: Path, *, min_width: int, min_height: int, min_size: int) -> None:
+    assert path.exists(), f"Missing asset: {path}"
+    assert path.read_bytes().startswith(PNG_SIGNATURE), f"Invalid PNG signature: {path}"
+    width, height = _read_png_dimensions(path)
+    assert width >= min_width
+    assert height >= min_height
+    assert path.stat().st_size >= min_size
 
 
 def _read_png_dimensions(path: Path) -> tuple[int, int]:
@@ -131,13 +142,31 @@ def test_render_dashboard_preview_from_generated_report(tmp_path: Path) -> None:
 
 def test_dashboard_preview_asset_exists_and_is_valid() -> None:
     png_path = Path(__file__).resolve().parent.parent / "demo" / "dashboard.png"
-    assert png_path.exists(), "Missing demo/dashboard.png preview asset"
-    assert png_path.read_bytes().startswith(PNG_SIGNATURE), "Invalid demo/dashboard.png PNG header"
+    _assert_png_asset(
+        png_path,
+        min_width=1280,
+        min_height=720,
+        min_size=MIN_ASSET_SIZE_BYTES,
+    )
 
-    width, height = _read_png_dimensions(png_path)
-    assert width >= 1280
-    assert height >= 720
-    assert png_path.stat().st_size >= MIN_ASSET_SIZE_BYTES
+
+def test_sheet_preview_assets_exist_and_are_valid() -> None:
+    root = Path(__file__).resolve().parent.parent
+    clean_data = root / "demo" / "clean_data.png"
+    weekly = root / "demo" / "weekly.png"
+
+    _assert_png_asset(
+        clean_data,
+        min_width=MIN_PREVIEW_WIDTH,
+        min_height=MIN_PREVIEW_HEIGHT,
+        min_size=20 * 1024,
+    )
+    _assert_png_asset(
+        weekly,
+        min_width=MIN_PREVIEW_WIDTH,
+        min_height=MIN_PREVIEW_HEIGHT,
+        min_size=20 * 1024,
+    )
 
 
 def test_demo_output_artifacts_exist_and_contain_expected_keys() -> None:

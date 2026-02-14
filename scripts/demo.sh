@@ -5,6 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INPUT_FILE="$ROOT_DIR/demo/input/messy_sales.csv"
 OUT_DIR="$ROOT_DIR/demo/output"
 PREVIEW_PNG="$ROOT_DIR/demo/dashboard.png"
+CLEAN_DATA_PNG="$ROOT_DIR/demo/clean_data.png"
+WEEKLY_PNG="$ROOT_DIR/demo/weekly.png"
 QC_CANONICAL="$OUT_DIR/qc_report.json"
 MANIFEST_CANONICAL="$OUT_DIR/run_manifest.json"
 QC_FRIENDLY="$OUT_DIR/qc.json"
@@ -43,10 +45,30 @@ if command -v uv >/dev/null 2>&1; then
   uv run --with pillow python "$ROOT_DIR/scripts/render_dashboard_preview.py" \
     --workbook "$OUT_DIR/Final_Report.xlsx" \
     --output "$PREVIEW_PNG"
+  uv run --with pillow python "$ROOT_DIR/scripts/render_sheet_preview.py" \
+    --workbook "$OUT_DIR/Final_Report.xlsx" \
+    --sheet "Clean_Data" \
+    --output "$CLEAN_DATA_PNG" \
+    --title "Clean_Data Preview"
+  uv run --with pillow python "$ROOT_DIR/scripts/render_sheet_preview.py" \
+    --workbook "$OUT_DIR/Final_Report.xlsx" \
+    --sheet "Weekly" \
+    --output "$WEEKLY_PNG" \
+    --title "Weekly Preview"
 else
   python "$ROOT_DIR/scripts/render_dashboard_preview.py" \
     --workbook "$OUT_DIR/Final_Report.xlsx" \
     --output "$PREVIEW_PNG"
+  python "$ROOT_DIR/scripts/render_sheet_preview.py" \
+    --workbook "$OUT_DIR/Final_Report.xlsx" \
+    --sheet "Clean_Data" \
+    --output "$CLEAN_DATA_PNG" \
+    --title "Clean_Data Preview"
+  python "$ROOT_DIR/scripts/render_sheet_preview.py" \
+    --workbook "$OUT_DIR/Final_Report.xlsx" \
+    --sheet "Weekly" \
+    --output "$WEEKLY_PNG" \
+    --title "Weekly Preview"
 fi
 
 # Customer-friendly JSON aliases for quick browsing.
@@ -60,3 +82,5 @@ echo "  $OUT_DIR/Final_Report.xlsx"
 echo "  $QC_FRIENDLY"
 echo "  $MANIFEST_FRIENDLY"
 echo "  $PREVIEW_PNG"
+echo "  $CLEAN_DATA_PNG"
+echo "  $WEEKLY_PNG"

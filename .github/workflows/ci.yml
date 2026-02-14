@@ -66,6 +66,8 @@ jobs:
           test -f demo/output/qc.json
           test -f demo/output/manifest.json
           test -f demo/dashboard.png
+          test -f demo/clean_data.png
+          test -f demo/weekly.png
 
   install_smoke:
     runs-on: ubuntu-latest
