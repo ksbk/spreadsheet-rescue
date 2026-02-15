@@ -19,6 +19,7 @@ Snippet:
 - `demo/output/Final_Report.xlsx`
 - `demo/output/qc.json`
 - `demo/output/manifest.json`
+- `demo/output/summary.txt`
 - `demo/dashboard.png`
 - `demo/clean_data.png`
 - `demo/weekly.png`

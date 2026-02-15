@@ -209,6 +209,132 @@ def _write_failure_artifacts(
     return qc_path, manifest_path
 
 
+def _write_text_artifact(path: Path, text: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(text, encoding="utf-8")
+    tmp_path.replace(path)
+    return path
+
+
+def _summary_date_range(clean_df: pd.DataFrame) -> str:
+    if clean_df.empty or "date" not in clean_df.columns:
+        return "N/A"
+    parsed = pd.to_datetime(clean_df["date"], errors="coerce")
+    parsed = parsed.dropna()
+    if parsed.empty:
+        return "N/A"
+    return f"{parsed.min().date().isoformat()} to {parsed.max().date().isoformat()}"
+
+
+def _summary_command(
+    *,
+    input_file: Path,
+    out_dir: Path,
+    mapping: dict[str, str],
+    profile: Path | None,
+    dayfirst: bool,
+    number_locale: NumberLocaleOption,
+) -> str:
+    parts: list[str] = [
+        "srescue run",
+        f"--input {input_file.name}",
+        f"--out-dir {out_dir.name or str(out_dir)}",
+        "--dayfirst" if dayfirst else "--monthfirst",
+        f"--number-locale {number_locale.value}",
+    ]
+    if profile:
+        parts.append(f"--profile {profile.name}")
+    for source, target in sorted(mapping.items()):
+        parts.append(f"--map {target}={source}")
+    return " ".join(parts)
+
+
+def _write_summary_artifact(
+    *,
+    out_dir: Path,
+    input_file: Path,
+    qc: QCReport,
+    kpis: dict[str, object],
+    clean_df: pd.DataFrame,
+    mapping: dict[str, str],
+    profile: Path | None,
+    dayfirst: bool,
+    number_locale: NumberLocaleOption,
+    max_warnings: int = 5,
+) -> Path:
+    def _as_float(value: object, default: float = 0.0) -> float:
+        if isinstance(value, bool):
+            return default
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            try:
+                return float(value)
+            except ValueError:
+                return default
+        return default
+
+    def _as_int(value: object, default: int = 0) -> int:
+        if isinstance(value, bool):
+            return default
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+        if isinstance(value, str):
+            try:
+                return int(value)
+            except ValueError:
+                return default
+        return default
+
+    warning_lines = qc.warnings[:max_warnings]
+    lines: list[str] = [
+        "spreadsheet-rescue summary",
+        f"tool_version: spreadsheet-rescue v{__version__}",
+        f"input_file: {input_file.name}",
+        f"rows_in: {qc.rows_in}",
+        f"rows_out: {qc.rows_out}",
+        f"rows_dropped: {qc.dropped_rows}",
+        f"warning_count: {len(qc.warnings)}",
+    ]
+    for idx, warning in enumerate(warning_lines, start=1):
+        lines.append(f"warning_{idx}: {warning}")
+    if len(qc.warnings) > max_warnings:
+        lines.append(f"warning_more: {len(qc.warnings) - max_warnings}")
+
+    total_revenue = _as_float(kpis.get("Total Revenue", 0.0))
+    total_profit = _as_float(kpis.get("Total Profit", 0.0))
+    margin = _as_float(kpis.get("Profit Margin %", 0.0))
+    total_units = _as_int(kpis.get("Total Units", 0))
+    top_product = str(kpis.get("Top Product", "N/A"))
+    top_region = str(kpis.get("Top Region", "N/A"))
+
+    lines.extend(
+        [
+            f"date_range: {_summary_date_range(clean_df)}",
+            f"kpi_total_revenue: {total_revenue:.2f}",
+            f"kpi_total_profit: {total_profit:.2f}",
+            f"kpi_profit_margin_pct: {margin:.2f}",
+            f"kpi_total_units: {total_units}",
+            f"kpi_top_product: {top_product}",
+            f"kpi_top_region: {top_region}",
+            "command: "
+            + _summary_command(
+                input_file=input_file,
+                out_dir=out_dir,
+                mapping=mapping,
+                profile=profile,
+                dayfirst=dayfirst,
+                number_locale=number_locale,
+            ),
+        ]
+    )
+    payload = "\n".join(lines) + "\n"
+    return _write_text_artifact(out_dir / "summary.txt", payload)
+
+
 # ── Callbacks ────────────────────────────────────────────────────
 
 
@@ -409,6 +535,20 @@ def run(
         # ── Manifest ─────────────────────────────────────────────
         manifest_path = _write_manifest(out_dir, input_file, run_id, created_at, qc)
         echo(f"  Manifest -> {manifest_path}")
+
+        # ── Human-readable summary ──────────────────────────────
+        summary_path = _write_summary_artifact(
+            out_dir=out_dir,
+            input_file=input_file,
+            qc=qc,
+            kpis=kpis,
+            clean_df=clean_df,
+            mapping=mapping,
+            profile=profile,
+            dayfirst=dayfirst,
+            number_locale=number_locale,
+        )
+        echo(f"  Summary  -> {summary_path}")
 
         if not quiet:
             console.print(Panel(

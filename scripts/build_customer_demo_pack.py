@@ -16,6 +16,7 @@ DEMO_FILE_ORDER = [
     Path("demo/output/Final_Report.xlsx"),
     Path("demo/output/qc.json"),
     Path("demo/output/manifest.json"),
+    Path("demo/output/summary.txt"),
     Path("demo/dashboard.png"),
     Path("demo/clean_data.png"),
     Path("demo/weekly.png"),
@@ -43,6 +44,8 @@ def _readme_text() -> str:
         "  Data quality warnings and rows in/out for trust and transparency.\n"
         "- demo/output/manifest.json\n"
         "  Run status, error code, row counts, and reproducibility metadata.\n"
+        "- demo/output/summary.txt\n"
+        "  Human-readable run summary (rows, warnings, date range, and KPIs).\n"
         "- demo/dashboard.png\n"
         "  KPI dashboard preview generated deterministically from workbook values.\n"
         "- demo/clean_data.png\n"

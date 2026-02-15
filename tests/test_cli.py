@@ -170,9 +170,18 @@ def test_run_success_generates_report(tmp_path: Path) -> None:
     assert (out_dir / "Final_Report.xlsx").exists()
     assert (out_dir / "qc_report.json").exists()
     assert (out_dir / "run_manifest.json").exists()
+    summary_path = out_dir / "summary.txt"
+    assert summary_path.exists()
     qc = json.loads((out_dir / "qc_report.json").read_text())
     assert qc["missing_columns"] == []
     assert qc["rows_out"] == 2
+    summary = summary_path.read_text(encoding="utf-8")
+    assert summary.endswith("\n")
+    assert "spreadsheet-rescue summary" in summary
+    assert "rows_in: 2" in summary
+    assert "rows_out: 2" in summary
+    assert "kpi_total_revenue: 300.00" in summary
+    assert "command: srescue run --input complete.csv --out-dir run_success" in summary
 
 
 def test_validate_nonquiet_shows_summary_table(tmp_path: Path) -> None:

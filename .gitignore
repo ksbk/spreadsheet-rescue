@@ -26,6 +26,7 @@ output/
 *.xlsx
 !demo/output/
 !demo/output/Final_Report.xlsx
+demo/output/summary.txt
 site/
 
 # IDE

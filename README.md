@@ -20,6 +20,7 @@ Outputs:
 - `demo/output/Final_Report.xlsx`
 - `demo/output/qc.json`
 - `demo/output/manifest.json`
+- `demo/output/summary.txt`
 - `demo/dashboard.png`
 - `demo/clean_data.png`
 - `demo/weekly.png`
@@ -46,7 +47,8 @@ Maintainer preflight:
 2. Open `demo/output/Final_Report.xlsx` and inspect `Dashboard`, `Clean_Data`, and `Weekly`.
 3. Review `demo/output/qc.json` for parsing/dropped-row warnings.
 4. Review `demo/output/manifest.json` for run status and reproducibility metadata.
-5. Use `demo/dashboard.png`, `demo/clean_data.png`, and `demo/weekly.png` as quick-share proof assets.
+5. Review `demo/output/summary.txt` for a quick human-readable run synopsis.
+6. Use `demo/dashboard.png`, `demo/clean_data.png`, and `demo/weekly.png` as quick-share proof assets.
 
 ## See demo outputs
 

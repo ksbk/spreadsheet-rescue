@@ -30,7 +30,7 @@ echo "[smoke] Checking installed CLI"
 spreadsheet-rescue --help >/dev/null
 
 echo "[smoke] Running demo pipeline"
-rm -f demo/output/Final_Report.xlsx demo/output/qc.json demo/output/manifest.json demo/dashboard.png
+rm -f demo/output/Final_Report.xlsx demo/output/qc.json demo/output/manifest.json demo/output/summary.txt demo/dashboard.png
 rm -f demo/clean_data.png demo/weekly.png
 ./scripts/demo.sh
 
@@ -38,6 +38,7 @@ echo "[smoke] Verifying demo outputs"
 test -f demo/output/Final_Report.xlsx
 test -f demo/output/qc.json
 test -f demo/output/manifest.json
+test -f demo/output/summary.txt
 test -f demo/dashboard.png
 test -f demo/clean_data.png
 test -f demo/weekly.png

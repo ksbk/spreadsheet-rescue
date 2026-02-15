@@ -18,6 +18,7 @@ Fix messy CSV/XLSX -> clean Excel report + QC + manifest.
 - `Final_Report.xlsx`
 - `qc.json`
 - `manifest.json`
+- `summary.txt`
 - `dashboard.png`
 - `clean_data.png`
 - `weekly.png`
@@ -52,6 +53,7 @@ Outputs:
 - `demo/output/Final_Report.xlsx`
 - `demo/output/qc.json`
 - `demo/output/manifest.json`
+- `demo/output/summary.txt`
 - `demo/dashboard.png`
 - `demo/clean_data.png`
 - `demo/weekly.png`

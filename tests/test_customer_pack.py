@@ -23,6 +23,7 @@ REQUIRED_NAMES = {
     "demo/output/Final_Report.xlsx",
     "demo/output/qc.json",
     "demo/output/manifest.json",
+    "demo/output/summary.txt",
     "demo/dashboard.png",
     "demo/clean_data.png",
     "demo/weekly.png",
@@ -65,6 +66,15 @@ def test_build_customer_pack_contains_required_files_and_keys(tmp_path: Path) ->
             }
         ).encode("utf-8"),
     )
+    _write_file(
+        repo_root / "demo/output/summary.txt",
+        (
+            "spreadsheet-rescue summary\n"
+            "rows_in: 10\n"
+            "rows_out: 9\n"
+            "warning_count: 1\n"
+        ).encode("utf-8"),
+    )
     _write_file(repo_root / "demo/dashboard.png", PNG_1X1)
     _write_file(repo_root / "demo/clean_data.png", PNG_1X1)
     _write_file(repo_root / "demo/weekly.png", PNG_1X1)
@@ -92,6 +102,7 @@ def test_build_customer_pack_contains_required_files_and_keys(tmp_path: Path) ->
 
         qc = json.loads(zf.read("demo/output/qc.json").decode("utf-8"))
         manifest = json.loads(zf.read("demo/output/manifest.json").decode("utf-8"))
+        summary = zf.read("demo/output/summary.txt").decode("utf-8")
         run_demo_mac = zf.read("dist/RUN_DEMO.command").decode("utf-8")
         run_demo_win = zf.read("dist/run_demo.bat").decode("utf-8")
 
@@ -101,6 +112,8 @@ def test_build_customer_pack_contains_required_files_and_keys(tmp_path: Path) ->
     assert "Final_Report.xlsx" in run_demo_mac
     assert run_demo_win.startswith("@echo off")
     assert "Final_Report.xlsx" in run_demo_win
+    assert summary.startswith("spreadsheet-rescue summary")
+    assert "rows_in:" in summary
 
 
 def test_customer_pack_is_deterministic(tmp_path: Path) -> None:
@@ -118,6 +131,10 @@ def test_customer_pack_is_deterministic(tmp_path: Path) -> None:
     _write_file(
         repo_root / "demo/output/manifest.json",
         b'{"status": "success", "error_code": null, "rows_in": 2, "rows_out": 2}',
+    )
+    _write_file(
+        repo_root / "demo/output/summary.txt",
+        b"spreadsheet-rescue summary\nrows_in: 2\nrows_out: 2\nwarning_count: 0\n",
     )
     _write_file(repo_root / "demo/dashboard.png", PNG_1X1)
     _write_file(repo_root / "demo/clean_data.png", PNG_1X1)

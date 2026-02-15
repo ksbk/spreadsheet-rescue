@@ -25,6 +25,7 @@ This dataset includes ambiguous dates, mixed numeric locales, non-standard heade
 - `demo/output/Final_Report.xlsx`
 - `demo/output/qc.json`
 - `demo/output/manifest.json`
+- `demo/output/summary.txt`
 - `demo/dashboard.png`
 - `demo/clean_data.png`
 - `demo/weekly.png`
@@ -50,3 +51,4 @@ This dataset includes ambiguous dates, mixed numeric locales, non-standard heade
 - `Clean_Data`: typed values + formula-safe output
 - `Weekly`: grouped totals by week
 - `qc.json` and `manifest.json`: trust/audit trail
+- `summary.txt`: quick human-readable run summary
