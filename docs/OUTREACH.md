@@ -1,5 +1,42 @@
 # Customer Outreach Pack
 
+## Target buyer list
+
+- Accountants and bookkeepers serving small businesses.
+- Shopify/Etsy operators with recurring export cleanup pain.
+- Small wholesalers/distributors with spreadsheet-heavy reporting.
+- Founder-led operations with weekly/monthly manual report prep.
+
+## 7-day outreach sprint
+
+Daily baseline:
+- 20 outbound messages/day (rotate email + LinkedIn DM templates).
+- 2 follow-ups/day on prior outreach.
+- 1 public proof post/day (dashboard screenshot + one-line offer).
+
+Day-by-day:
+- Day 1: finalize target list and send first 20 messages.
+- Day 2: send 20 new messages + 2 follow-ups; track responses.
+- Day 3: send 20 new messages + 2 follow-ups; share proof post angle #2.
+- Day 4: send 20 new messages + 2 follow-ups; collect objections.
+- Day 5: send 20 new messages + 2 follow-ups; refine CTA language.
+- Day 6: send 20 new messages + 2 follow-ups; prioritize warm leads.
+- Day 7: send 20 new messages + 2 follow-ups; close calls and deliveries.
+
+## Tracking schema (CRM v0)
+
+- `lead_name`
+- `channel` (email, LinkedIn, Upwork, local)
+- `source_url_or_context`
+- `sent_date`
+- `response_status` (no reply, interested, booked, closed)
+- `next_step`
+- `next_step_date`
+- `package` (A/B/C)
+- `quoted_price`
+- `due_date`
+- `delivery_status`
+
 ## 90-second demo narrative
 
 1. "You send me a messy CSV/XLSX export."

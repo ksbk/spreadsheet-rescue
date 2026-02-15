@@ -1,10 +1,20 @@
 # Fix messy CSV/XLSX -> clean Excel report + audit trail
 
 [FORM_URL]: https://forms.gle/REPLACE_WITH_YOUR_FORM_ID
+[DEMO_PACK_URL]: https://github.com/ksbk/spreadsheet-rescue/releases/latest/download/customer-demo-pack.zip
+[RELEASES_URL]: https://github.com/ksbk/spreadsheet-rescue/releases/latest
 
 Fix messy CSV/XLSX -> clean Excel report + QC + manifest.
 
-[Download customer demo pack](https://github.com/ksbk/spreadsheet-rescue/releases/download/v0.1.5/customer-demo-pack.zip) | [Send me your file][FORM_URL] | [See sample output](demo/DEMO.md)
+[Send me your file][FORM_URL] | [Download customer demo pack][DEMO_PACK_URL] | [See sample output](demo/DEMO.md)
+
+Starting at **EUR 150** for Quick Rescue. See [Services](SERVICES.md).
+
+## How it works
+
+1. Upload your messy CSV/XLSX and deadline in the intake form.
+2. I clean and normalize the file with explicit QC warnings and manifest metadata.
+3. You receive a report pack you can review, share, and rerun.
 
 ## Intake requirements
 
@@ -23,6 +33,15 @@ Fix messy CSV/XLSX -> clean Excel report + QC + manifest.
 - `clean_data.png`
 - `weekly.png`
 
+Latest pack note: this link follows the latest GitHub release. You can also browse [Releases][RELEASES_URL].
+
+## What you get in 60 minutes
+
+- `Final_Report.xlsx`
+- `qc.json`
+- `manifest.json`
+- `dashboard.png`
+
 ## Proof
 
 ![Dashboard proof](https://raw.githubusercontent.com/ksbk/spreadsheet-rescue/main/demo/dashboard.png)
@@ -31,11 +50,22 @@ Fix messy CSV/XLSX -> clean Excel report + QC + manifest.
 
 ![Weekly proof](https://raw.githubusercontent.com/ksbk/spreadsheet-rescue/main/demo/weekly.png)
 
-## Trust
+## Designed to prevent silent corruption
 
-- No silent EU number corruption: locale collisions are flagged with deterministic behavior.
-- Ambiguous dates are flagged before they can silently corrupt metrics.
-- QC + manifest artifacts are always emitted, including contracted failures.
+- EU/US numeric collisions are detected and normalized with explicit warnings.
+- Ambiguous day/month dates are flagged before they can silently skew KPIs.
+- Formula-like strings are escaped in Excel output to prevent formula injection.
+
+## Audit trail every run
+
+- `manifest.json` records `status`, `error_code`, and row in/out counters.
+- `qc.json` records warnings, dropped-row behavior, and schema issues.
+- QC + manifest artifacts are emitted even on contracted failure paths.
+
+## Deterministic demo outputs
+
+- Dashboard/table preview PNGs are rendered from workbook data with deterministic scripts.
+- Buyer-facing proof assets are reproducible across reruns.
 
 ## Common pain it solves
 
