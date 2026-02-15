@@ -61,8 +61,8 @@ def main() -> None:
     parser.add_argument(
         "--notes",
         type=Path,
-        default=Path("docs/releases/v0.1.4.md"),
-        help="Release notes markdown file.",
+        default=None,
+        help="Release notes markdown file. Default: docs/releases/<tag>.md",
     )
     parser.add_argument(
         "--asset",
@@ -83,7 +83,8 @@ def main() -> None:
     args = parser.parse_args()
 
     repo_root = _repo_root()
-    notes = (repo_root / args.notes).resolve()
+    notes_path = args.notes or Path(f"docs/releases/{args.tag}.md")
+    notes = (repo_root / notes_path).resolve()
     asset = (repo_root / args.asset).resolve()
 
     if shutil.which("gh") is None:
