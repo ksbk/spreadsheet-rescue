@@ -8,6 +8,9 @@ theme:
 
 nav:
   - Home: index.md
+  - Services: SERVICES.md
+  - Outreach Pack: OUTREACH.md
+  - Delivery Checklist: DELIVERY_CHECKLIST.md
   - Trust Guarantees: TRUST.md
   - Use Cases: USE_CASES.md
   - Onboarding: ONBOARDING.md

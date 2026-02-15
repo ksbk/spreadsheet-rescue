@@ -1,6 +1,22 @@
 # Fix messy CSV/XLSX -> clean Excel report + audit trail
 
-`spreadsheet-rescue` turns messy spreadsheet exports into a client-ready Excel report with QC and manifest artifacts.
+Fix messy CSV/XLSX -> clean Excel report + QC + manifest.
+
+[Download customer demo pack](https://github.com/ksbk/spreadsheet-rescue/releases/download/v0.1.5/customer-demo-pack.zip) | [Send me your file](mailto:kbersha@gmail.com?subject=Spreadsheet%20Rescue%20Intake&body=Hi%2C%20I%20want%20a%20spreadsheet%20cleanup.%20Here%20is%20my%20file%20or%20Drive%20link%3A%0A%0ADeadline%3A%0A)
+
+## Proof
+
+![Dashboard proof](https://raw.githubusercontent.com/ksbk/spreadsheet-rescue/main/demo/dashboard.png)
+
+![Clean_Data proof](https://raw.githubusercontent.com/ksbk/spreadsheet-rescue/main/demo/clean_data.png)
+
+![Weekly proof](https://raw.githubusercontent.com/ksbk/spreadsheet-rescue/main/demo/weekly.png)
+
+## Trust
+
+- No silent EU number corruption: locale collisions are flagged with deterministic behavior.
+- Ambiguous dates are flagged before they can silently corrupt metrics.
+- QC + manifest artifacts are always emitted, including contracted failures.
 
 ## Common pain it solves
 
@@ -22,19 +38,11 @@ Outputs:
 - `demo/clean_data.png`
 - `demo/weekly.png`
 
-## Trust Guarantees
-
-- Always emits QC + manifest artifacts, including contracted failures.
-- Formula-injection safe Excel output (formula-like inputs are escaped).
-- Deterministic demo proof renders from workbook data.
-
-## Not For
-
-- Large enterprise ETL platforms and distributed data orchestration.
-- Fully custom finance rule engines (tax/FX/accounting policy stacks).
-
 ## Learn more
 
+- [Services](SERVICES.md)
+- [Outreach pack](OUTREACH.md)
+- [Delivery checklist](DELIVERY_CHECKLIST.md)
 - [Trust contract](TRUST.md)
 - [Use cases](USE_CASES.md)
 - [Onboarding](ONBOARDING.md)
