@@ -1,5 +1,9 @@
 # Services
 
+[STRIPE_PAY_URL]: https://example.com/replace-with-stripe-payment-link
+[PAYPAL_PAY_URL]: https://example.com/replace-with-paypal-invoice-link
+[UPWORK_CONTRACT_URL]: https://www.upwork.com/
+
 ## Package A - Quick Rescue (fixed price)
 
 - Best for: one urgent spreadsheet cleanup.
@@ -37,6 +41,18 @@
 - `dashboard.png`
 - `clean_data.png`
 - `weekly.png`
+
+Reference preview:
+- [Sample delivery](SAMPLE_DELIVERY.md)
+
+## How to pay
+
+- Stripe payment link: [Pay with Stripe][STRIPE_PAY_URL]
+- PayPal invoice: [Pay with PayPal][PAYPAL_PAY_URL]
+- Upwork direct contract: [Book via Upwork][UPWORK_CONTRACT_URL]
+
+Fast lane flow:
+- Pay link -> upload file -> delivery in 60 minutes (simple single-file jobs) or 24-48h standard turnaround.
 
 ## Contact
 

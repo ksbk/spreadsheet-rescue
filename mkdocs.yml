@@ -9,6 +9,7 @@ theme:
 nav:
   - Home: index.md
   - Services: SERVICES.md
+  - Sample Delivery: SAMPLE_DELIVERY.md
   - Outreach Pack: OUTREACH.md
   - Delivery Checklist: DELIVERY_CHECKLIST.md
   - Trust Guarantees: TRUST.md

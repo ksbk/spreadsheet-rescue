@@ -8,7 +8,10 @@ Fix messy CSV/XLSX -> clean Excel report + QC + manifest.
 
 [Send me your file][FORM_URL] | [Download customer demo pack][DEMO_PACK_URL] | [See sample output](demo/DEMO.md)
 
+Trust badges: **EU/US numeric safety** | **Ambiguous date warnings** | **Always emits QC+manifest** | **Formula-injection safe**
+
 Starting at **EUR 150** for Quick Rescue. See [Services](SERVICES.md).
+Need immediate delivery? [How to pay](SERVICES.md#how-to-pay) | [Sample delivery](SAMPLE_DELIVERY.md)
 
 ## How it works
 
@@ -91,6 +94,7 @@ Outputs:
 ## Learn more
 
 - [Services](SERVICES.md)
+- [Sample delivery](SAMPLE_DELIVERY.md)
 - [Outreach pack](OUTREACH.md)
 - [Delivery checklist](DELIVERY_CHECKLIST.md)
 - [Trust contract](TRUST.md)
