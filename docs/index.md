@@ -1,8 +1,26 @@
 # Fix messy CSV/XLSX -> clean Excel report + audit trail
 
+[FORM_URL]: https://forms.gle/REPLACE_WITH_YOUR_FORM_ID
+
 Fix messy CSV/XLSX -> clean Excel report + QC + manifest.
 
-[Download customer demo pack](https://github.com/ksbk/spreadsheet-rescue/releases/download/v0.1.5/customer-demo-pack.zip) | [Send me your file](mailto:kbersha@gmail.com?subject=Spreadsheet%20Rescue%20Intake&body=Hi%2C%20I%20want%20a%20spreadsheet%20cleanup.%20Here%20is%20my%20file%20or%20Drive%20link%3A%0A%0ADeadline%3A%0A)
+[Download customer demo pack](https://github.com/ksbk/spreadsheet-rescue/releases/download/v0.1.5/customer-demo-pack.zip) | [Send me your file][FORM_URL] | [See sample output](demo/DEMO.md)
+
+## Intake requirements
+
+- Upload your CSV/XLSX file.
+- Tell us date style: `day-first`, `month-first`, or `unknown`.
+- Provide currency/locale (`EUR`, `USD`, decimal style).
+- List desired output columns if you have specific requirements.
+
+## What you receive
+
+- `Final_Report.xlsx`
+- `qc.json`
+- `manifest.json`
+- `dashboard.png`
+- `clean_data.png`
+- `weekly.png`
 
 ## Proof
 
